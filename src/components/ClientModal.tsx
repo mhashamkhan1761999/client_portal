@@ -1,0 +1,400 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import supabase from '../lib/supabaseClient'
+import { useRouter } from 'next/navigation';
+
+export default function ClientModal({
+  open,
+  onClose,
+  onSaved,
+  clientData,
+  currentUser,
+}: {
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+  clientData?: any
+  currentUser: any
+}) {
+  const router = useRouter()
+
+  const [form, setForm] = useState({
+    client_name: '',
+    phone_numbers: [''],
+    email_addresses: [''],
+    work_email: '',
+    website_url: '',
+    status: 'new',
+    assigned_to: '',
+    service_id: '',
+    sold_price: null as number | null,
+  })
+
+  const [users, setUsers] = useState<any[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [showAddService, setShowAddService] = useState(false)
+  const [newService, setNewService] = useState({ name: '', description: '', sold_price: 0 })
+  const [errors, setErrors] = useState<any>({})
+
+  const validateForm = () => {
+    const newErrors: any = {}
+
+    if (!form.client_name.trim()) newErrors.client_name = 'Client name is required'
+
+    if (!form.work_email.trim()) {
+      newErrors.work_email = 'Work email is required'
+    } else if (!/^\S+@\S+\.\S+$/.test(form.work_email)) {
+      newErrors.work_email = 'Invalid email format'
+    }
+
+    const phone = form.phone_numbers[0]?.trim()
+    if (!phone) {
+      newErrors.phone_numbers = 'Phone number is required'
+    } else if (!/^\d+$/.test(phone)) {
+      newErrors.phone_numbers = 'Phone number must contain only digits'
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  useEffect(() => {
+    fetchUsers()
+    fetchServices()
+
+    if (clientData) {
+      setForm({
+        client_name: clientData.client_name || '',
+        phone_numbers: clientData.phone_numbers || [''],
+        email_addresses: clientData.email_addresses || [''],
+        work_email: clientData.work_email || '',
+        website_url: clientData.website_url || '',
+        status: clientData.status || 'new',
+        assigned_to: clientData.assigned_to || '',
+        service_id: clientData.service_id || '',
+        sold_price: clientData?.sold_price ?? null,
+      })
+    } else if (currentUser?.role !== 'admin') {
+      setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
+    }
+  }, [clientData])
+
+  const fetchUsers = async () => {
+    const { data } = await supabase.from('users').select('id, sudo_name')
+    setUsers(data || [])
+  }
+
+  const fetchServices = async () => {
+    const { data } = await supabase.from('services').select('id, service_name')
+    setServices(data || [])
+  }
+
+  const handleChange = (key: string, value: any) => {
+    setForm(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return
+
+    const phoneToCheck = form.phone_numbers[0]?.trim()
+
+    // Fetch clients with matching name or email
+    const { data: possibleDuplicates, error } = await supabase
+      .from('clients')
+      .select('id, phone_numbers')
+      .or(`work_email.eq.${form.work_email},client_name.eq.${form.client_name}`)
+
+    const duplicate = possibleDuplicates?.find((c: any) => {
+      if (clientData && c.id === clientData.id) return false
+      return c.phone_numbers?.includes(phoneToCheck)
+    })
+
+    if (duplicate) {
+      toast.error('Client already exists with same name, email, or phone number.')
+      return
+    }
+
+    let clientId: string | null = null
+
+    if (clientData) {
+      const { data: updated } = await supabase
+        .from('clients')
+        .update(form)
+        .eq('id', clientData.id)
+        .select('id')
+        .single()
+
+      clientId = updated?.id ?? null
+
+      if (form.service_id && form.sold_price) {
+        await supabase.from('client_service_sales').upsert({
+          client_id: clientId,
+          service_id: form.service_id,
+          sold_price: form.sold_price,
+          sold_at: new Date().toISOString(),
+        }, { onConflict: 'client_id,service_id' })
+      }
+
+      toast.success('Client updated successfully')
+    } else {
+      const { data: inserted, error } = await supabase.from('clients').insert([form]).select('id').single()
+
+      if (error || !inserted) {
+        toast.error('Failed to insert client')
+        return
+      }
+
+      clientId = inserted.id
+
+      if (form.service_id && form.sold_price) {
+        await supabase.from('client_service_sales').insert([
+          {
+            client_id: clientId,
+            service_id: form.service_id,
+            sold_price: form.sold_price,
+            sold_at: new Date().toISOString(),
+          },
+        ])
+      }
+
+      toast.success('Client added successfully')
+    }
+
+    onSaved()
+    onClose()
+  }
+
+  const handleAddNewService = async () => {
+    if (!newService.name) {
+      toast.error('Service name is required')
+      return
+    }
+
+    const { data, error } = await supabase.from('services').insert([
+      {
+        service_name: newService.name,
+        description: newService.description,
+        created_by: currentUser?.id,
+      },
+    ]).select()
+
+    if (error) {
+      toast.error('Failed to add service')
+      return
+    }
+
+    if (data?.[0]) {
+      setServices(prev => [...prev, data[0]])
+      handleChange('service_id', data[0].id)
+      toast.success('New service added!')
+      setShowAddService(false)
+      setNewService({ name: '', description: '', sold_price: 0 })
+    }
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-[#1c1c1e] text-white rounded-xl p-6 w-full max-w-3xl shadow-lg overflow-y-auto max-h-[90vh]">
+        <h2 className="text-3xl font-bold mb-6 text-[#c29a4b]">
+          {clientData ? 'Edit Client' : 'Add New Client'}
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Client Name */}
+          <div>
+            <label className="block mb-1">Client Name</label>
+            <input
+                className={`w-full p-2 rounded bg-[#111] border ${errors.client_name ? 'border-red-500' : 'border-gray-600'}`}
+                value={form.client_name}
+                onChange={(e) => handleChange('client_name', e.target.value)}
+            />
+            {errors.client_name && <p className="text-red-500 text-sm">{errors.client_name}</p>}
+        </div>
+
+        {/* Work Email */}
+        <div>
+            <label className="block mb-1">Work Email</label>
+            <input
+                type="email"
+                className={`w-full p-2 rounded bg-[#111] border ${errors.work_email ? 'border-red-500' : 'border-gray-600'}`}
+                value={form.work_email}
+                onChange={(e) => handleChange('work_email', e.target.value)}
+            />
+            {errors.work_email && <p className="text-red-500 text-sm">{errors.work_email}</p>}
+        </div>
+
+          {/* Website URL */}
+          <div>
+            <label className="block text-sm mb-1">Website URL (optional)</label>
+            <input
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              value={form.website_url}
+              onChange={(e) => handleChange('website_url', e.target.value)}
+            />
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-sm mb-1">Status</label>
+            <select
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              value={form.status}
+              onChange={(e) => handleChange('status', e.target.value)}
+            >
+              <option value="new">New</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="upsell">Upsell</option>
+              <option value="converted">Converted</option>
+              <option value="followup">Follow Up</option>
+              <option value="delivered">Delivered</option>
+            </select>
+          </div>
+
+          {/* Assigned To */}
+          <div>
+            <label className="block text-sm mb-1">Assigned To</label>
+            <select
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              value={form.assigned_to}
+              onChange={(e) => handleChange('assigned_to', e.target.value)}
+            >
+              <option value="">Select</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.sudo_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Service */}
+          <div>
+            <label className="block text-sm mb-1">Service</label>
+            <select
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              value={form.service_id}
+              onChange={(e) => handleChange('service_id', e.target.value)}
+            >
+              <option value="">Select</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.service_name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => setShowAddService(!showAddService)}
+              className="text-xs text-yellow-400 hover:underline mt-1"
+            >
+              {showAddService ? 'Cancel Add Service' : 'Add New Service'}
+            </button>
+
+            {showAddService && (
+              <div className="mt-3 bg-[#111] border border-gray-700 p-3 rounded">
+                <input
+                  className="w-full mb-2 bg-[#1c1c1e] border border-gray-600 rounded px-3 py-2"
+                  placeholder="Service Name"
+                  value={newService.name}
+                  onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                />
+                <textarea
+                  className="w-full bg-[#1c1c1e] border border-gray-600 rounded px-3 py-2"
+                  placeholder="Service Description"
+                  value={newService.description}
+                  onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                />
+                <input
+                    type="number"
+                    step="0.01"
+                    className="w-full p-2 rounded bg-[#111] border border-gray-600"
+                    value={form.sold_price ?? ''}
+                    onChange={(e) => {
+                        const value = e.target.value;
+                        handleChange('sold_price', value === '' ? null : parseFloat(value));
+                    }}
+                    placeholder="Enter sold price (optional)"
+                    />
+                <button
+                  className="mt-2 bg-[#c29a4b] text-black px-4 py-1 rounded hover:bg-yellow-500"
+                  onClick={handleAddNewService}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Phone Numbers */}
+          <div>
+            <label className="block mb-1">Phone Numbers</label>
+                {form.phone_numbers.map((num, i) => (
+                    <input
+                    key={i}
+                    type="text"
+                    className={`w-full p-2 mb-2 rounded bg-[#111] border ${errors.phone_numbers ? 'border-red-500' : 'border-gray-600'}`}
+                    value={num}
+                    onChange={(e) => {
+                        const updated = [...form.phone_numbers];
+                        updated[i] = e.target.value;
+                        handleChange('phone_numbers', updated);
+                    }}
+                    />
+                ))}
+                {errors.phone_numbers && <p className="text-red-500 text-sm">{errors.phone_numbers}</p>}
+            </div>
+
+            <div>
+            <label className="block mb-1">Sold Price</label>
+            <input
+                type="number"
+                step="0.01"
+                className="w-full p-2 rounded bg-[#111] border border-gray-600"
+                value={form.sold_price || ''}
+                onChange={(e) => handleChange('sold_price', parseFloat(e.target.value))}
+                placeholder="Enter sold price (optional)"
+            />
+            </div>
+
+
+          {/* Email Addresses */}
+          <div className="col-span-full">
+            <label className="block text-sm mb-1">Email Addresses</label>
+            {form.email_addresses.map((email, i) => (
+              <input
+                key={i}
+                className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 mb-2"
+                value={email}
+                onChange={(e) => {
+                  const updated = [...form.email_addresses]
+                  updated[i] = e.target.value
+                  handleChange('email_addresses', updated)
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="bg-gray-600 px-4 py-2 rounded hover:bg-gray-500"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="bg-[#c29a4b] text-black px-6 py-2 font-semibold rounded hover:bg-yellow-500"
+          >
+            {clientData ? 'Update' : 'Add Client'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

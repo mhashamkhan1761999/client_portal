@@ -3,8 +3,9 @@
 import React from 'react'
 import Layout from './components/Layout'
 import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { supabase } from '../lib/supabaseClient'
 import { UserGroupIcon, CheckCircleIcon, ClockIcon, XCircleIcon, ArrowTrendingUpIcon, InboxStackIcon } from '@heroicons/react/24/outline'
+import ClientTable from '../components/ClientTable'
 
 
 
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const recentClients = assignedClients.slice(0, 5)
 
   return (
+    
     <Layout>
       <h1 className="text-3xl font-bold mb-6 text-[#c29a4b]">📈 MetaMalistic CRM Dashboard</h1>
 
@@ -57,10 +59,16 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+        <ClientTable />
     </Layout>
+
+    
+    
   )
+  
 }
 
+// @ts-ignore
 function StatCard({ label, count, color, icon }: { label: string; count: number; color: string; icon: JSX.Element }) {
   return (
     <div className={`rounded-xl p-5 ${color} text-white shadow-lg flex items-center space-x-4`}>

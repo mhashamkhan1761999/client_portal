@@ -11,9 +11,11 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.52.1",
+    "lucide-react": "^0.532.0",
     "next": "15.4.4",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-hot-toast": "^2.5.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

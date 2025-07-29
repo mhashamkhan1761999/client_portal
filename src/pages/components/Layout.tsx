@@ -1,17 +1,22 @@
-import Link from 'next/link'
+'use client'
+
+import React, { useState } from 'react'
 import { useRouter } from 'next/router'
-import { ReactNode } from 'react'
-import Image from 'next/image'
+import Link from 'next/link'
+import { ReactNode } from 'react'// if using this modal
+import Image from 'next/image'  
+import ClientModal from '../../components/ClientModal' // ✅ Make sure the path is correct
+
 
 // import logo from '../../public/logo.svg' // Adjust the path as necessary
 
+
+
+
 const menuItems = [
   { name: 'Dashboard', path: '/dashboard' },  
-  { name: 'Add New Client', path: '/clients/add' },
-  { name: 'Update Client Information', path: '/clients/update' },
-  
-  { name: 'All Clients', path: '/clients' },
-  { name: 'Completed', path: '/completed' },
+  { name: 'All Clients', path: '/all-clients' },
+  { name: 'Completed', path: '/clients/completed' },
   { name: 'In Progress', path: '/in-progress' },
   { name: 'Unresponsive', path: '/unresponsive' },
   { name: 'Settings', path: '/settings' },
@@ -20,15 +25,13 @@ const menuItems = [
 
 export default function Layout({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const [showAddClient, setShowAddClient] = useState(false) // ✅ moved inside component
 
   return (
     <div className="flex min-h-screen bg-[#111111] text-white">
       {/* Sidebar */}
-      <aside className="w-80 bg-[#1c1c1e] p-6 border-r border-[#2a2a2a]">
-         <div className="mb-10">
-          {/* Replace with your actual logo */}
-          <Image src="/images/white-logo.png" alt="MetaMalistic" width={250} height={40} />
-        </div>
+      <aside className="w-64 bg-[#1c1c1e] p-6 border-r border-[#2a2a2a]">
+        <div className="text-2xl font-bold text-[#c29a4b] mb-8">MetaMalistic</div>
         <nav className="space-y-2">
           {menuItems.map((item) => (
             <Link
@@ -44,10 +47,28 @@ export default function Layout({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+
+        {/* Add Client Button */}
+        <button
+          onClick={() => setShowAddClient(true)}
+          className="mt-6 w-full bg-[#c29a4b] text-black py-2 px-4 rounded-lg font-semibold"
+        >
+          + Add Client
+        </button>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex-1 p-6">
+        {children}
+      </main>
+
+      {/* Client Modal */}
+      {showAddClient && (
+        <ClientModal
+          open={showAddClient}
+          onClose={() => setShowAddClient(false)}
+          onSaved={() => setShowAddClient(false)} currentUser={undefined}        />
+      )}
     </div>
   )
 }
