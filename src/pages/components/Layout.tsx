@@ -31,7 +31,15 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-[#111111] text-white">
       {/* Sidebar */}
       <aside className="w-64 bg-[#1c1c1e] p-6 border-r border-[#2a2a2a]">
-        <div className="text-2xl font-bold text-[#c29a4b] mb-8">MetaMalistic</div>
+        <div className="mb-8 flex justify-center">
+        <Image
+          src="/images/white-logo.png" // Update the path if your logo is elsewhere
+          alt="MetaMalistic Logo"
+          width={250}
+          height={40}
+          priority
+        />
+      </div>
         <nav className="space-y-2">
           {menuItems.map((item) => (
             <Link

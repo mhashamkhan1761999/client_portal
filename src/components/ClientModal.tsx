@@ -29,13 +29,12 @@ export default function ClientModal({
     status: 'new',
     assigned_to: '',
     service_id: '',
-    sold_price: null as number | null,
   })
 
   const [users, setUsers] = useState<any[]>([])
   const [services, setServices] = useState<any[]>([])
   const [showAddService, setShowAddService] = useState(false)
-  const [newService, setNewService] = useState({ name: '', description: '', sold_price: 0 })
+  const [newService, setNewService] = useState({ name: '', description: '', })
   const [errors, setErrors] = useState<any>({})
 
   const validateForm = () => {
@@ -74,7 +73,6 @@ export default function ClientModal({
         status: clientData.status || 'new',
         assigned_to: clientData.assigned_to || '',
         service_id: clientData.service_id || '',
-        sold_price: clientData?.sold_price ?? null,
       })
     } else if (currentUser?.role !== 'admin') {
       setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
@@ -128,15 +126,6 @@ export default function ClientModal({
 
       clientId = updated?.id ?? null
 
-      if (form.service_id && form.sold_price) {
-        await supabase.from('client_service_sales').upsert({
-          client_id: clientId,
-          service_id: form.service_id,
-          sold_price: form.sold_price,
-          sold_at: new Date().toISOString(),
-        }, { onConflict: 'client_id,service_id' })
-      }
-
       toast.success('Client updated successfully')
     } else {
       const { data: inserted, error } = await supabase.from('clients').insert([form]).select('id').single()
@@ -147,18 +136,6 @@ export default function ClientModal({
       }
 
       clientId = inserted.id
-
-      if (form.service_id && form.sold_price) {
-        await supabase.from('client_service_sales').insert([
-          {
-            client_id: clientId,
-            service_id: form.service_id,
-            sold_price: form.sold_price,
-            sold_at: new Date().toISOString(),
-          },
-        ])
-      }
-
       toast.success('Client added successfully')
     }
 
@@ -190,7 +167,7 @@ export default function ClientModal({
       handleChange('service_id', data[0].id)
       toast.success('New service added!')
       setShowAddService(false)
-      setNewService({ name: '', description: '', sold_price: 0 })
+      setNewService({ name: '', description: ''})
     }
   }
 
@@ -309,7 +286,7 @@ export default function ClientModal({
                   value={newService.description}
                   onChange={(e) => setNewService({ ...newService, description: e.target.value })}
                 />
-                <input
+                {/* <input
                     type="number"
                     step="0.01"
                     className="w-full p-2 rounded bg-[#111] border border-gray-600"
@@ -319,7 +296,7 @@ export default function ClientModal({
                         handleChange('sold_price', value === '' ? null : parseFloat(value));
                     }}
                     placeholder="Enter sold price (optional)"
-                    />
+                    /> */}
                 <button
                   className="mt-2 bg-[#c29a4b] text-black px-4 py-1 rounded hover:bg-yellow-500"
                   onClick={handleAddNewService}
@@ -332,7 +309,7 @@ export default function ClientModal({
 
           {/* Phone Numbers */}
           <div>
-            <label className="block mb-1">Phone Numbers</label>
+            <label className="block text-sm mb-1">Phone Numbers</label>
                 {form.phone_numbers.map((num, i) => (
                     <input
                     key={i}
@@ -350,20 +327,8 @@ export default function ClientModal({
             </div>
 
             <div>
-            <label className="block mb-1">Sold Price</label>
-            <input
-                type="number"
-                step="0.01"
-                className="w-full p-2 rounded bg-[#111] border border-gray-600"
-                value={form.sold_price || ''}
-                onChange={(e) => handleChange('sold_price', parseFloat(e.target.value))}
-                placeholder="Enter sold price (optional)"
-            />
-            </div>
+            {/* Email Addresses */}
 
-
-          {/* Email Addresses */}
-          <div className="col-span-full">
             <label className="block text-sm mb-1">Email Addresses</label>
             {form.email_addresses.map((email, i) => (
               <input
@@ -377,6 +342,7 @@ export default function ClientModal({
                 }}
               />
             ))}
+          
           </div>
         </div>
 
