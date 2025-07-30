@@ -15,6 +15,7 @@ export interface Client {
   profile_url?: string
   connecting_platform?: string
   platform_name?: string 
+  sudo_name?: string // Added for sudo_name from platform
 }
 
 export interface ClientNote {

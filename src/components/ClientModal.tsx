@@ -11,12 +11,15 @@ export default function ClientModal({
   onSaved,
   clientData,
   currentUser,
+  isServiceEditable = true,
+
 }: {
   open: boolean
   onClose: () => void
   onSaved: () => void
   clientData?: any
   currentUser: any
+  isServiceEditable?: boolean
 }) {
   const router = useRouter()
 
@@ -359,9 +362,10 @@ export default function ClientModal({
           <div>
             <label className="block text-sm mb-1">Assigned To</label>
             <select
-              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 disabled:opacity-50"
               value={form.assigned_to}
               onChange={(e) => handleChange('assigned_to', e.target.value)}
+              disabled={!isServiceEditable} // 🔒 disable based on flag
             >
               <option value="">Select</option>
               {users.map((user) => (
@@ -370,32 +374,47 @@ export default function ClientModal({
                 </option>
               ))}
             </select>
+
+            {!isServiceEditable && (
+              <p className="text-xs text-gray-400 mt-1 italic">
+                Editing assigned user is disabled on this screen.
+              </p>
+            )}
           </div>
 
           {/* Service */}
           <div>
             <label className="block text-sm mb-1">Service</label>
             <select
-              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
-              value={form.service_id}
-              onChange={(e) => handleChange('service_id', e.target.value)}
-            >
-              <option value="">Select</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.service_name}
-                </option>
-              ))}
+                className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 disabled:opacity-50"
+                value={form.service_id}
+                onChange={(e) => handleChange('service_id', e.target.value)}
+                disabled={!isServiceEditable  } // 🔒 Lock when false
+                >
+                <option value="">Select</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.service_name}
+                  </option>
+                ))}
             </select>
+            {!isServiceEditable && (
+              <p className="text-xs text-gray-400 mt-1 italic">
+                Service selection is disabled on this screen.
+              </p>
+            )}
 
-            <button
-              onClick={() => setShowAddService(!showAddService)}
-              className="text-xs text-yellow-400 hover:underline mt-1"
-            >
-              {showAddService ? 'Cancel Add Service' : 'Add New Service'}
-            </button>
 
-            {showAddService && (
+            {isServiceEditable && (
+                <button
+                  onClick={() => setShowAddService(!showAddService)}
+                  className="text-xs text-yellow-400 hover:underline mt-1"
+                >
+                  {showAddService ? 'Cancel Add Service' : 'Add New Service'}
+                </button>
+              )}
+
+            {isServiceEditable && showAddService &&  (
               <div className="mt-3 bg-[#111] border border-gray-700 p-3 rounded">
                 <input
                   className="w-full mb-2 bg-[#1c1c1e] border border-gray-600 rounded px-3 py-2"
@@ -409,17 +428,6 @@ export default function ClientModal({
                   value={newService.description}
                   onChange={(e) => setNewService({ ...newService, description: e.target.value })}
                 />
-                {/* <input
-                    type="number"
-                    step="0.01"
-                    className="w-full p-2 rounded bg-[#111] border border-gray-600"
-                    value={form.sold_price ?? ''}
-                    onChange={(e) => {
-                        const value = e.target.value;
-                        handleChange('sold_price', value === '' ? null : parseFloat(value));
-                    }}
-                    placeholder="Enter sold price (optional)"
-                    /> */}
                 <button
                   className="mt-2 bg-[#c29a4b] text-black px-4 py-1 rounded hover:bg-yellow-500"
                   onClick={handleAddNewService}

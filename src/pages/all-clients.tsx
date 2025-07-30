@@ -15,6 +15,7 @@ type Client = {
   email_addresses?: string[]
   work_email?: string
   status: string
+  assignto: string
   created_at: string
   [key: string]: any // fallback to allow dynamic keys
 }
@@ -177,7 +178,6 @@ const filteredClients = clients.filter((client) => {
 
   return (
     client.client_name?.toLowerCase().includes(search) ||
-    client.work_email?.toLowerCase().includes(search) ||
     client.email_addresses?.some((email) => email.toLowerCase().includes(search)) ||
     client.phone_numbers?.some((phone) => phone.includes(search)) ||
     client.status?.toLowerCase().includes(search)
@@ -248,7 +248,7 @@ return (
           <th scope="col" className="px-4 py-3">S/N</th> {/* New Serial Number Column */}
           <th className="px-4 py-3">Name</th>
           <th className="px-4 py-3">Phone</th>
-          <th className="px-4 py-3">Work Email</th>
+          <th className="px-4 py-3">Email Address</th>
           <th className="px-4 py-3">Status</th>
           <th className="px-4 py-3">Created At</th>
           <th className="px-4 py-3">Actions</th>
@@ -261,7 +261,9 @@ return (
     
             <td className="px-4 py-2">{client.client_name}</td>
             <td className="px-4 py-2">{client.phone_numbers?.[0] || '-'}</td>
-            <td className="px-4 py-2">{client.work_email}</td>
+            <td className="px-4 py-2">{client.email_addresses}</td>
+
+            {/* <td className="px-4 py-2">{client.email_addresses}</td>  */}
             <td className="px-6 py-2">{getStatusBadge(client.status)}</td>
             <td className="px-4 py-2">{formatDate(client.created_at)}</td>
             <td className="px-4 py-2 flex gap-1">
@@ -270,13 +272,6 @@ return (
                   View
                 </button>
               </Link>
-
-              <button 
-                className="bg-yellow-500 text-black px-2 py-1 rounded text-xs"
-                onClick={() => handleEdit(client)}
-              >
-                Edit
-              </button>
               <button
                 className="bg-red-600 text-white px-2 py-1 rounded text-xs"
                 onClick={() => handleDelete(client.id)}
