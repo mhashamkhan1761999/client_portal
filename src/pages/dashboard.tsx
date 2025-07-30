@@ -3,9 +3,10 @@
 import React from 'react'
 import Layout from './components/Layout'
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import supabase from '../lib/supabaseClient'
 import { UserGroupIcon, CheckCircleIcon, ClockIcon, XCircleIcon, ArrowTrendingUpIcon, InboxStackIcon } from '@heroicons/react/24/outline'
 import ClientTable from '../components/ClientTable'
+
 
 
 

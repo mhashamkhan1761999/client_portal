@@ -29,39 +29,45 @@ export default function ClientModal({
     status: 'new',
     assigned_to: '',
     service_id: '',
+    connecting_platform: '',
+    gender: '',
+    profile_url: '',
+    platform: '',
   })
 
   const [users, setUsers] = useState<any[]>([])
   const [services, setServices] = useState<any[]>([])
+  const [number, setNumber] = useState<any[]>([])
   const [showAddService, setShowAddService] = useState(false)
   const [newService, setNewService] = useState({ name: '', description: '', })
   const [errors, setErrors] = useState<any>({})
 
   const validateForm = () => {
-    const newErrors: any = {}
+  const newErrors: any = {}
 
-    if (!form.client_name.trim()) newErrors.client_name = 'Client name is required'
-
-    if (!form.work_email.trim()) {
-      newErrors.work_email = 'Work email is required'
-    } else if (!/^\S+@\S+\.\S+$/.test(form.work_email)) {
-      newErrors.work_email = 'Invalid email format'
-    }
-
-    const phone = form.phone_numbers[0]?.trim()
-    if (!phone) {
-      newErrors.phone_numbers = 'Phone number is required'
-    } else if (!/^\d+$/.test(phone)) {
-      newErrors.phone_numbers = 'Phone number must contain only digits'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+  if (!form.client_name.trim()) {
+    newErrors.client_name = 'Client name is required'
   }
+
+  const phone = form.phone_numbers[0]?.replace(/\D/g, '')
+
+  if (!phone) {
+    newErrors.phone_numbers = 'Phone number is required'
+  } else if (phone.length !== 10) {
+    newErrors.phone_numbers = 'Phone number must be 10 digits long'
+  }
+
+  // Email is now optional, so we skip required check
+
+  setErrors(newErrors)
+  return Object.keys(newErrors).length === 0
+  }
+
 
   useEffect(() => {
     fetchUsers()
     fetchServices()
+    fetchNumbers()
 
     if (clientData) {
       setForm({
@@ -73,6 +79,10 @@ export default function ClientModal({
         status: clientData.status || 'new',
         assigned_to: clientData.assigned_to || '',
         service_id: clientData.service_id || '',
+        connecting_platform: clientData.connecting_platform || '',
+        gender: clientData.gender || '',
+        profile_url: clientData.profile_url || '',
+        platform: clientData.platform || '',
       })
     } else if (currentUser?.role !== 'admin') {
       setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
@@ -88,6 +98,15 @@ export default function ClientModal({
     const { data } = await supabase.from('services').select('id, service_name')
     setServices(data || [])
   }
+
+  const fetchNumbers = async () => {
+  const { data } = await supabase
+    .from('client_contact_channels')
+    .select('id, platform, phone_number, assigned_to')
+
+  setNumber(data || [])
+  }
+
 
   const handleChange = (key: string, value: any) => {
     setForm(prev => ({ ...prev, [key]: value }))
@@ -171,6 +190,12 @@ export default function ClientModal({
     }
   }
 
+  const formatPhoneUS = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 10)
+    const match = digits.match(/^(\d{3})(\d{3})(\d{4})$/)
+      return match ? `(${match[1]}) ${match[2]}-${match[3]}` : value
+  }
+
   if (!open) return null
 
   return (
@@ -180,29 +205,127 @@ export default function ClientModal({
           {clientData ? 'Edit Client' : 'Add New Client'}
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Client Name */}
-          <div>
-            <label className="block mb-1">Client Name</label>
-            <input
-                className={`w-full p-2 rounded bg-[#111] border ${errors.client_name ? 'border-red-500' : 'border-gray-600'}`}
-                value={form.client_name}
-                onChange={(e) => handleChange('client_name', e.target.value)}
-            />
-            {errors.client_name && <p className="text-red-500 text-sm">{errors.client_name}</p>}
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Client Name */}
+            <div>
+              <label className="block mb-1">Client Name</label>
+              <input
+                  className={`w-full p-2 rounded bg-[#111] border ${errors.client_name ? 'border-red-500' : 'border-gray-600'}`}
+                  value={form.client_name}
+                  onChange={(e) => handleChange('client_name', e.target.value)}
+              />
+              {errors.client_name && <p className="text-red-500 text-sm">{errors.client_name}</p>}
+          </div>
 
-        {/* Work Email */}
-        <div>
-            <label className="block mb-1">Work Email</label>
+          <div> 
+            {/* Email Addresses */}
+
+            <label className="block text-sm mb-1">Email Addresses</label>
+            {form.email_addresses.map((email, i) => (
+              <input
+                key={i}
+                className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 mb-2"
+                value={email}
+                onChange={(e) => {
+                  const updated = [...form.email_addresses]
+                  updated[i] = e.target.value
+                  handleChange('email_addresses', updated)
+                }}
+              />
+            ))}
+          
+          </div>
+           {/* Phone Numbers */}
+          <div>
+            <label className="block text-sm mb-1">Phone Number</label>
+              <input
+                type="tel"
+                placeholder="1234567890"
+                value={form.phone_numbers[0]}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '')
+                  setForm((prev) => ({ ...prev, phone_numbers: [digits] }))
+                }}
+                className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
+              />
+              {errors.phone_numbers && <p className="text-red-500 text-sm">{errors.phone_numbers}</p>}
+          </div>
+
+          {/* Work Email */}
+          <div>
+              <label className="block mb-1">Work Email</label>
+              <input
+                  type="email"
+                  className={`w-full p-2 rounded bg-[#111] border ${errors.work_email ? 'border-red-500' : 'border-gray-600'}`}
+                  value={form.work_email}
+                  onChange={(e) => handleChange('work_email', e.target.value)}
+              />
+              {errors.work_email && <p className="text-red-500 text-sm">{errors.work_email}</p>}
+          </div>
+
+          {/* Gender Dropdown */}
+          <div>
+            <label className="block text-sm mb-1">Gender</label>
+            <select
+              className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
+              value={form.gender || ''}
+              onChange={(e) => handleChange('gender', e.target.value)}
+            >
+              <option value="">Select Gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+
+          {/* Own Connecting Dropdown */}
+          <div className="mb-4">
+            <label className="block text-sm mb-1">Connected With</label>
+              <select
+                value={form.connecting_platform}
+                onChange={(e) => handleChange('connecting_platform', e.target.value)}
+                className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
+              >
+              <option value="">Select Platform</option>
+              {number.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.platform} - {item.phone_number}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Platform Dropdown */}
+          <div>
+            <label className="block text-sm mb-1">Platform</label>
+            <select
+              className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
+              value={form.platform || ''}
+              onChange={(e) => handleChange('platform', e.target.value)}
+            >
+              <option value="">Select Platform</option>
+              <option value="Facebook">Facebook</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Threads">Threads</option>
+              <option value="LinkedIn">LinkedIn</option>
+              <option value="Bark">Bark</option>
+            </select>
+          </div>
+
+
+          {/* Profile URL */}
+          <div>
+            <label className="block text-sm mb-1">Profile URL</label>
             <input
-                type="email"
-                className={`w-full p-2 rounded bg-[#111] border ${errors.work_email ? 'border-red-500' : 'border-gray-600'}`}
-                value={form.work_email}
-                onChange={(e) => handleChange('work_email', e.target.value)}
+              type="text"
+              className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
+              value={form.profile_url || ''}
+              onChange={(e) => handleChange('profile_url', e.target.value)}
             />
-            {errors.work_email && <p className="text-red-500 text-sm">{errors.work_email}</p>}
-        </div>
+          </div>
+
+
 
           {/* Website URL */}
           <div>
@@ -306,9 +429,8 @@ export default function ClientModal({
               </div>
             )}
           </div>
-
-          {/* Phone Numbers */}
-          <div>
+          {/* Phone Numbers
+            <div>
             <label className="block text-sm mb-1">Phone Numbers</label>
                 {form.phone_numbers.map((num, i) => (
                     <input
@@ -325,25 +447,8 @@ export default function ClientModal({
                 ))}
                 {errors.phone_numbers && <p className="text-red-500 text-sm">{errors.phone_numbers}</p>}
             </div>
-
-            <div>
-            {/* Email Addresses */}
-
-            <label className="block text-sm mb-1">Email Addresses</label>
-            {form.email_addresses.map((email, i) => (
-              <input
-                key={i}
-                className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 mb-2"
-                value={email}
-                onChange={(e) => {
-                  const updated = [...form.email_addresses]
-                  updated[i] = e.target.value
-                  handleChange('email_addresses', updated)
-                }}
-              />
-            ))}
+            */}
           
-          </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-6">

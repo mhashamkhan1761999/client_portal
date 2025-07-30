@@ -4,17 +4,21 @@ import { useEffect, useState } from 'react'
 import supabase from '../lib/supabaseClient'
 import Layout from './components/Layout'
 import ClientModal from '../components/ClientModal'
+import Link from 'next/link'
+
+
 
 type Client = {
   id: string
   client_name: string
-  work_email: string
+  phone_numbers?: string[]
+  email_addresses?: string[]
+  work_email?: string
   status: string
   created_at: string
-  project_manager?: string
-   phone_numbers?: string[]
-  
+  [key: string]: any // fallback to allow dynamic keys
 }
+
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString()
@@ -30,10 +34,10 @@ export default function ClientTable() {
   const [showModal, setShowModal] = useState(false)
 
   const clientsPerPage = 20
-  const paginatedClients = clients.slice(
-    (currentPage - 1) * clientsPerPage,
-    currentPage * clientsPerPage
-  )
+  // const paginatedClients = clients.slice(
+  //   (currentPage - 1) * clientsPerPage,
+  //   currentPage * clientsPerPage
+  // )
 
   const getSortColumn = () => {
     switch (sortOption) {
@@ -142,7 +146,49 @@ const getStatusBadge = (status: string) => {
 }
 
 
+// Search Filter Code
 
+const [searchTerm, setSearchTerm] = useState('')
+// const [statusFilter, setStatusFilter] = useState('') // optional status dropdown
+// const [clients, setClients] = useState([]) // Supabase result
+
+
+useEffect(() => {
+  const fetchClients = async () => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching clients:', error.message)
+    } else {
+      setClients(data)
+    }
+  }
+
+  fetchClients()
+}, [])
+
+
+const filteredClients = clients.filter((client) => {
+  const search = searchTerm.toLowerCase()
+  if (statusFilter !== 'all' && client.status !== statusFilter) return false
+
+  return (
+    client.client_name?.toLowerCase().includes(search) ||
+    client.work_email?.toLowerCase().includes(search) ||
+    client.email_addresses?.some((email) => email.toLowerCase().includes(search)) ||
+    client.phone_numbers?.some((phone) => phone.includes(search)) ||
+    client.status?.toLowerCase().includes(search)
+  )
+})
+
+// Then apply pagination
+const paginatedClients = filteredClients.slice(
+  (currentPage - 1) * clientsPerPage,
+  currentPage * clientsPerPage
+)
 
 
 
@@ -150,9 +196,17 @@ return (
   
   <Layout>
 <div className="bg-[#1c1c1e] rounded-xl p-4 mt-6 shadow-md">
-  <div className="flex justify-between items-center mb-4">
-    <h2 className="text-xl font-semibold text-white">All Clients</h2>
-  </div>
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-xl font-semibold text-white">All Clients</h2>
+
+      <input
+        type="text"
+        placeholder="Search clients..."
+        className="px-3 py-2 rounded-md text-sm w-72 border border-gray-300 focus:outline-none focus:ring focus:ring-yellow-500"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
+    </div>
 
   {/* Filters and Sort */}
   <div className="flex flex-wrap justify-between mb-4">
@@ -211,13 +265,13 @@ return (
             <td className="px-6 py-2">{getStatusBadge(client.status)}</td>
             <td className="px-4 py-2">{formatDate(client.created_at)}</td>
             <td className="px-4 py-2 flex gap-1">
-              <button
-                className="bg-blue-600 text-white px-2 py-1 rounded text-xs"
-                onClick={() => console.log('View', client.id)} // Replace later
-              >
-                View
-              </button>
-              <button
+              <Link href={`/clients/${client.id}`}>
+                <button className="bg-blue-600 text-white px-2 py-1 rounded text-xs">
+                  View
+                </button>
+              </Link>
+
+              <button 
                 className="bg-yellow-500 text-black px-2 py-1 rounded text-xs"
                 onClick={() => handleEdit(client)}
               >
