@@ -18,6 +18,20 @@ export default function SingleClientPage() {
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [clientServices, setClientServices] = useState<any[]>([])
+
+  const bgColors = [
+    'bg-red-600',
+    'bg-blue-600',
+    'bg-green-600',
+    'bg-purple-600',
+    'bg-yellow-600',
+    'bg-pink-600',
+    'bg-indigo-600',
+    'bg-emerald-600',
+  ]
+
+
 
   const dummyServices = [
     {
@@ -96,11 +110,28 @@ export default function SingleClientPage() {
       })
 
       setLoading(false)
+
+                    
+
+        // after setting client data...
+        const { data: servicesData, error: servicesError } = await supabase
+          .from('services')
+          .select('*')
+          .eq('created_by', clientId)
+
+        if (servicesError) {
+          console.error('Failed to fetch services:', servicesError)
+        } else {
+          setClientServices(servicesData || [])
+        }
+
     }
 
     useEffect(() => {
-      fetchClientWithDetails()
-    }, [clientId])
+        if (clientId && typeof clientId === 'string') {
+          fetchClientWithDetails()
+        }
+      }, [clientId])
       
 
 
@@ -227,34 +258,28 @@ export default function SingleClientPage() {
           </div>
 
           {/* Dummy Services Column (1 column) */}
-         <div className="grid grid-cols-1 gap-4">
-            {dummyServices.map((service, index) => {
-              const bgColors = [
-                'bg-red-600',
-                'bg-blue-600',
-                'bg-green-600',
-                'bg-purple-600',
-                'bg-yellow-600',
-                'bg-pink-600',
-                'bg-indigo-600',
-                'bg-emerald-600',
-              ]
-              const randomColor = bgColors[index % bgColors.length]
+          <div className="grid grid-cols-1 gap-4">
+            {clientServices.length === 0 ? (
+              <div className="text-gray-400 text-sm">No services added yet.</div>
+            ) : (
+              clientServices.map((service, index) => {
+                const randomColor = bgColors[index % bgColors.length]
+                return (
+                  <div
+                    key={service.id}
+                    className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
+                  >
+                    <h3 className="text-lg font-bold">{service.service_name}</h3>
+                    <p className="text-sm">{service.description}</p>
+                    <p className="text-md font-semibold mt-2">${service.sold_price}</p>
+                    <button className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs">
+                      View Details
+                    </button>
+                  </div>
+                )
+              })
+            )}
 
-              return (
-                <div
-                  key={service.id}
-                  className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
-                >
-                  <h3 className="text-lg font-bold">{service.name}</h3>
-                  <p className="text-sm">{service.description}</p>
-                  <p className="text-md font-semibold mt-2">${service.price}</p>
-                  <button className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs">
-                    View Details
-                  </button>
-                </div>
-              )
-            })}
           </div>
 
         </div>
