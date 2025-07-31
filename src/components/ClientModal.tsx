@@ -383,7 +383,7 @@ export default function ClientModal({
           </div>
 
           {/* Service */}
-          <div>
+          {/* <div>
             <label className="block text-sm mb-1">Service</label>
             <select
                 className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 disabled:opacity-50"
@@ -436,7 +436,7 @@ export default function ClientModal({
                 </button>
               </div>
             )}
-          </div>
+          </div> */}
           {/* Phone Numbers
             <div>
             <label className="block text-sm mb-1">Phone Numbers</label>

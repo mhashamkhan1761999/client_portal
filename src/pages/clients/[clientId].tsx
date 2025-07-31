@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router'
-import { useEffect, useState, ReactNode } from 'react'
+import React, { useState, useEffect, ReactNode } from 'react'
 import supabase from '../../lib/supabaseClient'
 import {Client}  from '../../types/client'
 import Layout from '../components/Layout'
@@ -7,7 +7,7 @@ import ClientNotes from '../../components/ClientNotes'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import ClientModal from '@/src/components/ClientModal'
-
+import ServiceModal from '../../components/DetailModal' // Adjust the import path as needed
 
 
 
@@ -19,7 +19,9 @@ export default function SingleClientPage() {
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [clientServices, setClientServices] = useState<any[]>([])
-
+  const [showServiceModal, setShowServiceModal] = useState(false)
+  const [selectedService, setSelectedService] = useState<any | null>(null)
+  
   const bgColors = [
     'bg-red-600',
     'bg-blue-600',
@@ -57,6 +59,7 @@ export default function SingleClientPage() {
 
 
   const fetchClientWithDetails = async () => {
+    
 
     if (!clientId || typeof clientId !== 'string') return
     setLoading(true)
@@ -111,25 +114,29 @@ export default function SingleClientPage() {
 
       setLoading(false)
 
-                    
+      let serviceDetails = []         
 
-        // after setting client data...
-        const { data: servicesData, error: servicesError } = await supabase
+      // after setting client data...
+      if (clientData.service_id) {
+        const { data: serviceData, error: serviceError } = await supabase
           .from('services')
           .select('*')
-          .eq('created_by', clientId)
+          .eq('id', clientData.service_id)
 
-        if (servicesError) {
-          console.error('Failed to fetch services:', servicesError)
+        if (serviceError) {
+          console.error('Failed to fetch service:', serviceError)
         } else {
-          setClientServices(servicesData || [])
+          serviceDetails = serviceData
         }
+      }
+      setClientServices(serviceDetails || [])
 
     }
 
     useEffect(() => {
         if (clientId && typeof clientId === 'string') {
           fetchClientWithDetails()
+          
         }
       }, [clientId])
       
@@ -192,6 +199,7 @@ export default function SingleClientPage() {
           <div className="md:col-span-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-[#2a2a2a] p-4 rounded-lg">
               <InfoItem label="Phone" value={client.phone_numbers?.[0]} />
+              <InfoItem label="Email Address" value={client.email_addresses} />
               <InfoItem label="Work Email" value={client.work_email} />
 
               <InfoItem
@@ -270,11 +278,21 @@ export default function SingleClientPage() {
                     className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
                   >
                     <h3 className="text-lg font-bold">{service.service_name}</h3>
-                    <p className="text-sm">{service.description}</p>
+                    <td>
+                      {service.description.length > 100
+                        ? service.description.substring(0, 100) + "..."
+                        : service.description}
+                    </td>
                     <p className="text-md font-semibold mt-2">${service.sold_price}</p>
-                    <button className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs">
-                      View Details
-                    </button>
+                    <button
+                        className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs"
+                        onClick={() => {
+                          setSelectedService(service)
+                          setShowServiceModal(true)
+                        }}
+                      >
+                        View Details
+                      </button>
                   </div>
                 )
               })
@@ -290,16 +308,23 @@ export default function SingleClientPage() {
       </div>
 
       <ClientModal
-  open={showEditModal}
-  onClose={() => setShowEditModal(false)}
-  onSaved={() => {
-    setShowEditModal(false)
-    fetchClientWithDetails()
-  }}
-  clientData={client}
-  currentUser="system_admin"
-  isServiceEditable={false}
-/>
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSaved={() => {
+            setShowEditModal(false)
+            fetchClientWithDetails()
+          }}
+          clientData={client}
+          currentUser="system_admin"
+          isServiceEditable={false}
+        />
+
+        <ServiceModal
+            service={selectedService}
+            open={showServiceModal}
+            onClose={() => setShowServiceModal(false)}
+          />
+
 
 
 
@@ -316,4 +341,6 @@ function InfoItem({ label, value }: { label: string; value?: ReactNode }) {
       <span className="text-white mt-1">{value || '—'}</span>
     </div>
   )
+
+  
 }
