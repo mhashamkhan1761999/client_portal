@@ -8,6 +8,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import ClientModal from '@/src/components/ClientModal'
 import ServiceModal from '../../components/DetailModal' // Adjust the import path as needed
+import AddServiceModal from '@/src/components/AddServiceModal'
 
 
 
@@ -21,6 +22,9 @@ export default function SingleClientPage() {
   const [clientServices, setClientServices] = useState<any[]>([])
   const [showServiceModal, setShowServiceModal] = useState(false)
   const [selectedService, setSelectedService] = useState<any | null>(null)
+  const [openAddModal, setOpenAddModal] = useState(false)
+  const [services, setServices] = useState<any[]>([])
+  
   
   const bgColors = [
     'bg-red-600',
@@ -32,31 +36,6 @@ export default function SingleClientPage() {
     'bg-indigo-600',
     'bg-emerald-600',
   ]
-
-
-
-  const dummyServices = [
-    {
-      id: 1,
-      name: 'Website Redesign',
-      price: 300,
-      description: 'Complete redesign of client’s existing website.',
-    },
-    {
-      id: 2,
-      name: 'SEO Boost',
-      price: 150,
-      description: 'Improve search engine visibility with expert SEO tactics.',
-    },
-    {
-      id: 3,
-      name: 'Social Media Kit',
-      price: 100,
-      description: 'A pack of templates and assets for Instagram and Facebook.',
-    },
-  ]
-
-
 
   const fetchClientWithDetails = async () => {
     
@@ -70,6 +49,15 @@ export default function SingleClientPage() {
       .eq('id', clientId)
       .single()
 
+    
+
+    const { data: servicesData, error: servicesError } = await supabase.from('services').select('*')
+    if (servicesError) {
+      console.error('Error fetching services:', servicesError)
+    }
+    setServices(servicesData || [])
+
+
     if (clientError || !clientData) {
       toast.error('Failed to fetch client.')
       setLoading(false)
@@ -78,79 +66,93 @@ export default function SingleClientPage() {
 
     let platformName: string | null = null
     let sudoName: string | null = null
+    let leadAgentName: string | null = null
 
     // 🔹 Fetch connecting platform
-      if (clientData.connecting_platform) {
-        const { data: platformData } = await supabase
-          .from('client_contact_channels')
-          .select('platform')
-          .eq('id', clientData.connecting_platform)
-          .single()
+    if (clientData.lead_gen_id) {
+      const { data: platformData } = await supabase
+        .from('client_contact_channels')
+        .select('platform')
+        .eq('id', clientData.connecting_platform)
+        .single()
 
-        if (platformData?.platform) {
-          platformName = platformData.platform
-        }
+      if (platformData?.platform) {
+        platformName = platformData.platform
       }
-
-      // 🔹 Fetch assigned user’s sudo_name
-      if (clientData.assigned_to) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('sudo_name')
-          .eq('id', clientData.assigned_to)
-          .single()
-
-        if (userData?.sudo_name) {
-          sudoName = userData.sudo_name
-        }
-      }
-
-      // 🔹 Set final client object
-      setClient({
-        ...clientData,
-        platform_name: platformName,
-        sudo_name: sudoName,
-      })
-
-      setLoading(false)
-
-      let serviceDetails = []         
-
-      // after setting client data...
-      if (clientData.service_id) {
-        const { data: serviceData, error: serviceError } = await supabase
-          .from('services')
-          .select('*')
-          .eq('id', clientData.service_id)
-
-        if (serviceError) {
-          console.error('Failed to fetch service:', serviceError)
-        } else {
-          serviceDetails = serviceData
-        }
-      }
-      setClientServices(serviceDetails || [])
-
     }
 
-    useEffect(() => {
-        if (clientId && typeof clientId === 'string') {
-          fetchClientWithDetails()
-          
-        }
-      }, [clientId])
+    // 🔹 Fetch connecting platform
+    if (clientData.lead_gen_id) {
+      const { data: platformData } = await supabase
+        .from('lead_gens')
+        .select('name')
+        .eq('id', clientData.lead_gen_id)
+        .single()
+
+      if (platformData?.name) {
+        leadAgentName = platformData.name
+      }
+    }
+
+    // 🔹 Fetch assigned user’s sudo_name
+    if (clientData.assigned_to) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('sudo_name')
+        .eq('id', clientData.assigned_to)
+        .single()
+
+      if (userData?.sudo_name) {
+        sudoName = userData.sudo_name
+      }
+    }
+
+    // 🔹 Set final client object
+    setClient({
+      ...clientData,
+      platform_name: platformName,
+      sudo_name: sudoName,
+      lead_gen_name: leadAgentName,
+    })
+
+    setLoading(false)
+
+    let serviceDetails = []         
+
+    // after setting client data...
+    if (clientData.service_id) {
+      const { data: serviceData, error: serviceError } = await supabase
+        .from('services')
+        .select('*')
+        .eq('id', clientData.service_id)
+
+      if (serviceError) {
+        console.error('Failed to fetch service:', serviceError)
+      } else {
+        serviceDetails = serviceData
+      }
+    }
+    setClientServices(serviceDetails || [])
+
+  }
+
+  useEffect(() => {
+      if (clientId && typeof clientId === 'string') {
+        fetchClientWithDetails()
+        
+        
+      }
+    }, [clientId])
       
 
 
   if (loading) return <div className="text-white p-8">Loading client data...</div>
   if (!client) return <div className="text-red-500 p-8">Client not found.</div>
 
+  if (!clientId || typeof clientId !== 'string') {
+    return <div className="text-red-500 p-8">Invalid client ID.</div>
+  }
   
-    type InfoItemProps = {
-    label: string
-    value: ReactNode // ✅ accepts string, null, JSX, etc.
-    }
-
   return (
     
     <Layout>
@@ -177,11 +179,11 @@ export default function SingleClientPage() {
                 </button>
               </Link>
 
-              <Link href={`/clients/${client.id}/add-service`}>
-                <button className="bg-green-700 hover:bg-green-600 text-white text-sm px-4 py-2 rounded">
-                  ➕ Add Service
-                </button>
-              </Link>
+              
+              <button onClick={() => setOpenAddModal(true)} className="bg-green-700 hover:bg-green-600 text-white text-sm px-4 py-2 rounded">
+                ➕ Add Service
+              </button>
+              
             
               <button
                 className="bg-yellow-500 hover:bg-yellow-400 text-black text-sm px-4 py-2 rounded"
@@ -261,6 +263,7 @@ export default function SingleClientPage() {
               <InfoItem label="Connecting Platform" value={client.platform} />
               <InfoItem label="Assigned To" value={client?.sudo_name || '-'} />
               <InfoItem label="Gender" value={client.gender} />
+              <InfoItem label="Lead Gen Agent" value={client.lead_gen_name || '-'} />
               <InfoItem label="Created At" value={new Date(client.created_at).toLocaleString()} />
             </div>
           </div>
@@ -325,11 +328,11 @@ export default function SingleClientPage() {
             onClose={() => setShowServiceModal(false)}
           />
 
-
-
-
-
-
+          <AddServiceModal
+        isOpen={openAddModal}
+        onClose={() => setOpenAddModal(false)}
+        clientId={client.id} 
+        services={services}          />
     </Layout>
   )
 }

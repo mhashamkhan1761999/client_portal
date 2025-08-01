@@ -36,6 +36,7 @@ export default function ClientModal({
     gender: '',
     profile_url: '',
     platform: '',
+    lead_gen_id: '',
   })
 
   const [users, setUsers] = useState<any[]>([])
@@ -44,6 +45,7 @@ export default function ClientModal({
   const [showAddService, setShowAddService] = useState(false)
   const [newService, setNewService] = useState({ name: '', description: '', })
   const [errors, setErrors] = useState<any>({})
+  const [leadGens, setLeadGens] = useState<{ id: string; name: string }[]>([])
 
   const validateForm = () => {
   const newErrors: any = {}
@@ -71,6 +73,7 @@ export default function ClientModal({
     fetchUsers()
     fetchServices()
     fetchNumbers()
+    fetchLeadGens()
 
     if (clientData) {
       setForm({
@@ -86,6 +89,7 @@ export default function ClientModal({
         gender: clientData.gender || '',
         profile_url: clientData.profile_url || '',
         platform: clientData.platform || '',
+        lead_gen_id: clientData?.lead_gen_id || '',
       })
     } else if (currentUser?.role !== 'admin') {
       setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
@@ -197,6 +201,14 @@ export default function ClientModal({
     const digits = value.replace(/\D/g, '').slice(0, 10)
     const match = digits.match(/^(\d{3})(\d{3})(\d{4})$/)
       return match ? `(${match[1]}) ${match[2]}-${match[3]}` : value
+  }
+
+  const fetchLeadGens = async () => {
+    const { data, error } = await supabase
+      .from('lead_gens')
+      .select('id, name')
+
+    if (!error) setLeadGens(data || [])
   }
 
   if (!open) return null
@@ -375,12 +387,30 @@ export default function ClientModal({
               ))}
             </select>
 
+            
+
             {!isServiceEditable && (
               <p className="text-xs text-gray-400 mt-1 italic">
                 Editing assigned user is disabled on this screen.
               </p>
             )}
           </div>
+
+          <div>
+              <label className="block text-sm mb-1">Lead Gen Agent</label>
+              <select
+                className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+                value={form.lead_gen_id}
+                onChange={(e) => handleChange('lead_gen_id', e.target.value)}
+              >
+                <option value="">Select</option>
+                {leadGens.map((lg) => (
+                  <option key={lg.id} value={lg.id}>
+                    {lg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
           {/* Service */}
           {/* <div>

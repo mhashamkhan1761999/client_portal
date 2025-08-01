@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.7",
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.52.1",
     "lucide-react": "^0.532.0",
@@ -16,6 +17,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.5.2",
+    "sonner": "^2.0.6",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
