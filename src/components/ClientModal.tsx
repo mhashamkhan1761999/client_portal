@@ -31,7 +31,6 @@ export default function ClientModal({
     website_url: '',
     status: 'new',
     assigned_to: '',
-    service_id: '',
     connecting_platform: '',
     gender: '',
     profile_url: '',
@@ -71,7 +70,6 @@ export default function ClientModal({
 
   useEffect(() => {
     fetchUsers()
-    fetchServices()
     fetchNumbers()
     fetchLeadGens()
 
@@ -84,7 +82,6 @@ export default function ClientModal({
         website_url: clientData.website_url || '',
         status: clientData.status || 'new',
         assigned_to: clientData.assigned_to || '',
-        service_id: clientData.service_id || '',
         connecting_platform: clientData.connecting_platform || '',
         gender: clientData.gender || '',
         profile_url: clientData.profile_url || '',
@@ -167,40 +164,6 @@ export default function ClientModal({
 
     onSaved()
     onClose()
-  }
-
-  const handleAddNewService = async () => {
-    if (!newService.name) {
-      toast.error('Service name is required')
-      return
-    }
-
-    const { data, error } = await supabase.from('services').insert([
-      {
-        service_name: newService.name,
-        description: newService.description,
-        created_by: currentUser?.id,
-      },
-    ]).select()
-
-    if (error) {
-      toast.error('Failed to add service')
-      return
-    }
-
-    if (data?.[0]) {
-      setServices(prev => [...prev, data[0]])
-      handleChange('service_id', data[0].id)
-      toast.success('New service added!')
-      setShowAddService(false)
-      setNewService({ name: '', description: ''})
-    }
-  }
-
-  const formatPhoneUS = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 10)
-    const match = digits.match(/^(\d{3})(\d{3})(\d{4})$/)
-      return match ? `(${match[1]}) ${match[2]}-${match[3]}` : value
   }
 
   const fetchLeadGens = async () => {

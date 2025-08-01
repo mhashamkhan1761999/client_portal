@@ -38,10 +38,9 @@ export interface ClientService {
 }
 
 
-// types.ts
 export type Service = {
   id: string
   service_name: string
   description?: string
-  sold_price?: number
+  sold_price?: number | string
 }

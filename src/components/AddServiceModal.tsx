@@ -7,8 +7,10 @@ import supabase from '../lib/supabaseClient'
 // AddServiceModal.tsx
 import type {Service} from '../types/client'
 
+import { useUser } from '@supabase/auth-helpers-react'
 
-interface AddServiceModalProps {
+
+type AddServiceModalProps = {
   isOpen: boolean
   onClose: () => void
   clientId: string
@@ -17,52 +19,77 @@ interface AddServiceModalProps {
 
 
 
-export default function AddServiceModal({ isOpen, onClose, clientId, services }) {
-    const user = { id: 'admin-dev-user-id' }
+
+export default function AddServiceModal({
+  isOpen,
+  onClose,
+  clientId,
+  services,
+}: AddServiceModalProps){
+  const user = useUser()
+  const userId = process.env.NODE_ENV === 'development'
+  ? 'd65ebfde-ebf2-432d-9bed-85f230db8315'
+  : user?.id
+
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [packageName, setPackageName] = useState('')
-  const [price, setPrice] = useState('')
+  const [price, setPrice] = useState<string>('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSave = async () => {
-    if (!selectedServiceId || !clientId || !user?.id) {
-      toast.error('Missing required fields')
-      return
-    }
+  if (!selectedServiceId || !clientId || !userId) {
+    toast.error('Missing required fields')
+    return
+  }
 
-    setLoading(true)
+  setLoading(true)
 
-    const { error: insertError, data: insertData } = await supabase
-      .from('client_service_sales')
-      .insert({
-        client_id: clientId,
-        service_id: selectedServiceId,
-        package_name: packageName,
-        price: price,
-        sold_price: price,
-        created_by: user.id,
-      })
-      .select('*')
-      .single()
+  console.log('Saving with:', {
+    client_id: clientId,
+    service_id: selectedServiceId,
+    package_name: packageName,
+    price,
+    created_by: userId
+  })
 
-    if (insertError) {
-      toast.error('Failed to add service')
-      setLoading(false)
-      return
-    }
+  const { error: insertError, data: insertData } = await supabase
+    .from('client_service_sales')
+    .insert({
+    client_id: clientId,
+    service_id: selectedServiceId,
+    package_name: packageName,
+    price: price,
+    sold_price: price,
+    created_by: userId,
+  })
+  .select('*')
+  .single()
+
+  if (insertError) {
+    console.error('Insert error:', insertError)
+    toast.error('Failed to add service')
+    setLoading(false)
+    return
+  }
+
+  // ✅ Update client record with selected service
+  await supabase
+    .from('clients')
+    .update({ service_id: selectedServiceId })
+    .eq('id', clientId)
 
     await supabase.from('status_logs').insert({
       client_id: clientId,
       previous_status: null,
       new_status: null,
-      changed_by: user.id,
+      changed_by: userId,
       note: description,
       service_id: selectedServiceId,
       package_name: packageName,
       service_price: price,
       action_type: 'service_assigned',
-      affected_user: user.id,
+      affected_user: userId,
     })
 
     toast.success('Service added successfully')
@@ -72,6 +99,7 @@ export default function AddServiceModal({ isOpen, onClose, clientId, services })
     setDescription('')
     onClose()
     setLoading(false)
+    
   }
 
   return (
@@ -91,23 +119,23 @@ export default function AddServiceModal({ isOpen, onClose, clientId, services })
                         className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
                         value={selectedServiceId}
                         onChange={(e) => {
-                        const selectedId = e.target.value
-                        setSelectedServiceId(selectedId)
+                          const selectedId = e.target.value
+                          setSelectedServiceId(selectedId)
 
-                        const selected = services.find((s: Service) => s.id === selectedId)
-                        if (selected) {
-                            setPrice(selected.sold_price || '')
+                          const selected = services.find((s: Service) => s.id === selectedId)
+                          if (selected) {
+                            setPrice(String(selected.sold_price || ''))
                             setDescription(selected.description || '')
-                        }
+                          }
                         }}
-                    >
+                      >
                         <option value="">Select</option>
                         {services.map((service: Service) => (
-                        <option key={service.id} value={service.id}>
+                          <option key={service.id} value={service.id}>
                             {service.service_name}
-                        </option>
+                          </option>
                         ))}
-                    </select>
+                      </select>
                     </div>
 
                 <div>
@@ -125,8 +153,8 @@ export default function AddServiceModal({ isOpen, onClose, clientId, services })
                   <input
                     type="number"
                     className="w-full bg-[#111] border border-gray-600 text-white rounded px-3 py-2"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    value={price ?? ''}
+                    onChange={(e) => setPrice((e.target.value))}
                     placeholder="e.g., 59"
                   />
                 </div>

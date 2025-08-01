@@ -281,11 +281,11 @@ export default function SingleClientPage() {
                     className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
                   >
                     <h3 className="text-lg font-bold">{service.service_name}</h3>
-                    <td>
+                    <p>
                       {service.description.length > 100
                         ? service.description.substring(0, 100) + "..."
                         : service.description}
-                    </td>
+                    </p>
                     <p className="text-md font-semibold mt-2">${service.sold_price}</p>
                     <button
                         className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs"
