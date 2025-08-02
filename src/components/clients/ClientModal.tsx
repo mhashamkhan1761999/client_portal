@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import supabase from '../lib/supabaseClient'
+import supabase from '../../lib/supabaseClient'
 import { useRouter } from 'next/navigation';
 
 export default function ClientModal({

@@ -2,20 +2,19 @@ import { useRouter } from 'next/router'
 import React, { useState, useEffect, ReactNode } from 'react'
 import supabase from '../../lib/supabaseClient'
 import {Client}  from '../../types/client'
-import Layout from '../components/Layout'
-import ClientNotes from '../../components/ClientNotes'
+import Layout from '../../components/layout/Layout'
+import ClientNotes from '@/components/clients/ClientNotes'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import ClientModal from '@/src/components/ClientModal'
-import ServiceModal from '../../components/DetailModal' // Adjust the import path as needed
-import AddServiceModal from '@/src/components/AddServiceModal'
+import ClientModal from '@/components/clients/ClientModal'
+import ServiceModal from '@/components/shared/DetailModal' // Adjust the import path as needed
+import AddServiceModal from '../../components/clients/AddServiceModal'
 
 
 
 export default function SingleClientPage() {
   const router = useRouter()
   const { clientId } = router.query
-
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -24,8 +23,8 @@ export default function SingleClientPage() {
   const [selectedService, setSelectedService] = useState<any | null>(null)
   const [openAddModal, setOpenAddModal] = useState(false)
   const [services, setServices] = useState<any[]>([])
-  
-  
+  const [number, setNumber] = useState<any[]>([])
+
   const bgColors = [
     'bg-red-600',
     'bg-blue-600',
@@ -37,26 +36,21 @@ export default function SingleClientPage() {
     'bg-emerald-600',
   ]
 
-  const fetchClientWithDetails = async () => {
-    
+  const getPlatformLabel = (id: string | undefined) => {
+    const platform = number.find((n) => n.id === id)
+    return platform ? `${platform.platform} (${platform.phone_number})` : 'Not Set'
+  }
 
+  const fetchClientWithDetails = async () => {
     if (!clientId || typeof clientId !== 'string') return
     setLoading(true)
 
+    // 1. Fetch client
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
       .single()
-
-    
-
-    const { data: servicesData, error: servicesError } = await supabase.from('services').select('*')
-    if (servicesError) {
-      console.error('Error fetching services:', servicesError)
-    }
-    setServices(servicesData || [])
-
 
     if (clientError || !clientData) {
       toast.error('Failed to fetch client.')
@@ -64,50 +58,50 @@ export default function SingleClientPage() {
       return
     }
 
+    // 2. Fetch connecting platforms (numbers)
+    const { data: numberData, error: numberError } = await supabase
+      .from('client_contact_channels')
+      .select('id, platform, phone_number, assigned_to')
+
+    setNumber(numberData || [])
+
+    // 3. Fetch related services
+    const { data: servicesData, error: servicesError } = await supabase.from('services').select('*')
+    setServices(servicesData || [])
+
+    // 4. Fetch extra info
     let platformName: string | null = null
     let sudoName: string | null = null
     let leadAgentName: string | null = null
 
-    // 🔹 Fetch connecting platform
-    if (clientData.lead_gen_id) {
+    if (clientData.connecting_platform) {
       const { data: platformData } = await supabase
         .from('client_contact_channels')
         .select('platform')
         .eq('id', clientData.connecting_platform)
         .single()
-
-      if (platformData?.platform) {
-        platformName = platformData.platform
-      }
+      platformName = platformData?.platform || null
     }
 
-    // 🔹 Fetch connecting platform
     if (clientData.lead_gen_id) {
-      const { data: platformData } = await supabase
+      const { data: leadGen } = await supabase
         .from('lead_gens')
         .select('name')
         .eq('id', clientData.lead_gen_id)
         .single()
-
-      if (platformData?.name) {
-        leadAgentName = platformData.name
-      }
+      leadAgentName = leadGen?.name || null
     }
 
-    // 🔹 Fetch assigned user’s sudo_name
     if (clientData.assigned_to) {
       const { data: userData } = await supabase
         .from('users')
         .select('sudo_name')
         .eq('id', clientData.assigned_to)
         .single()
-
-      if (userData?.sudo_name) {
-        sudoName = userData.sudo_name
-      }
+      sudoName = userData?.sudo_name || null
     }
 
-    // 🔹 Set final client object
+    // 5. Update client state with extra data
     setClient({
       ...clientData,
       platform_name: platformName,
@@ -115,43 +109,50 @@ export default function SingleClientPage() {
       lead_gen_name: leadAgentName,
     })
 
-    setLoading(false)
+    // 6. Client's purchased services (if any)
+    let serviceDetails: any[] = []
 
-    let serviceDetails = []         
+    if (clientId) {
+      const { data: salesData, error: salesError } = await supabase
+        .from('client_service_sales')
+        .select('id, package_name, price, sold_price, description, service_id')
+        .eq('client_id', clientId)
 
-    // after setting client data...
-    if (clientData.service_id) {
-      const { data: serviceData, error: serviceError } = await supabase
-        .from('services')
-        .select('*')
-        .eq('id', clientData.service_id)
-
-      if (serviceError) {
-        console.error('Failed to fetch service:', serviceError)
+      if (salesError) {
+        console.error('Error fetching client_service_sales:', salesError)
       } else {
-        serviceDetails = serviceData
+        serviceDetails = salesData || []
       }
     }
-    setClientServices(serviceDetails || [])
 
+
+    setClientServices(serviceDetails)
+    setLoading(false)
   }
 
   useEffect(() => {
-      if (clientId && typeof clientId === 'string') {
-        fetchClientWithDetails()
-        
-        
-      }
-    }, [clientId])
-      
+    if (!router.isReady || !clientId || typeof clientId !== 'string') return
+    fetchClientWithDetails()
+  }, [router.isReady, clientId])
 
 
-  if (loading) return <div className="text-white p-8">Loading client data...</div>
-  if (!client) return <div className="text-red-500 p-8">Client not found.</div>
-
-  if (!clientId || typeof clientId !== 'string') {
-    return <div className="text-red-500 p-8">Invalid client ID.</div>
+  if (!router.isReady || loading) {
+  return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#1A1A1D]">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-t-4 border-yellow-400 animate-spin"></div>
+        </div>
+        <p className="mt-4 text-sm text-yellow-300">Loading client info, please wait...</p>
+      </div>
+    )
   }
+
+  if (!client) {
+    return <div className="text-red-500 p-8">Client not found.</div>
+  }
+
+  if (!clientId || typeof clientId !== 'string') return <div className="text-red-500 p-8">Invalid client ID.</div>
+
   
   return (
     
@@ -203,7 +204,6 @@ export default function SingleClientPage() {
               <InfoItem label="Phone" value={client.phone_numbers?.[0]} />
               <InfoItem label="Email Address" value={client.email_addresses} />
               <InfoItem label="Work Email" value={client.work_email} />
-
               <InfoItem
                 label="Profile URL"
                 value={
@@ -259,8 +259,7 @@ export default function SingleClientPage() {
                   })() : '-'
                 }
               />
-
-              <InfoItem label="Connecting Platform" value={client.platform} />
+              <InfoItem label="Connecting Platform" value={getPlatformLabel(client.connecting_platform)}/>
               <InfoItem label="Assigned To" value={client?.sudo_name || '-'} />
               <InfoItem label="Gender" value={client.gender} />
               <InfoItem label="Lead Gen Agent" value={client.lead_gen_name || '-'} />
@@ -268,26 +267,28 @@ export default function SingleClientPage() {
             </div>
           </div>
 
-          {/* Dummy Services Column (1 column) */}
-          <div className="grid grid-cols-1 gap-4">
-            {clientServices.length === 0 ? (
-              <div className="text-gray-400 text-sm">No services added yet.</div>
-            ) : (
-              clientServices.map((service, index) => {
-                const randomColor = bgColors[index % bgColors.length]
-                return (
-                  <div
-                    key={service.id}
-                    className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
-                  >
-                    <h3 className="text-lg font-bold">{service.service_name}</h3>
-                    <p>
-                      {service.description.length > 100
-                        ? service.description.substring(0, 100) + "..."
-                        : service.description}
-                    </p>
-                    <p className="text-md font-semibold mt-2">${service.sold_price}</p>
-                    <button
+          {/* Services Section with Smooth Scroll */}
+          <div className="max-h-[500px] overflow-y-auto pr-2 scroll-smooth scrollbar-custom">
+
+            <div className="grid grid-cols-1 gap-4">
+              {clientServices.length === 0 ? (
+                <div className="text-gray-400 text-sm">No services added yet.</div>
+              ) : (
+                clientServices.map((service, index) => {
+                  const randomColor = bgColors[index % bgColors.length]
+                  return (
+                    <div
+                      key={service.id}
+                      className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
+                    >
+                      <h3 className="text-lg font-bold">{service.package_name}</h3>
+                      <p>
+                        {service.description && service.description.length > 100
+                          ? service.description.substring(0, 100) + "..."
+                          : service.description || 'No description available'}
+                      </p>
+                      <p className="text-md font-semibold mt-2">${service.sold_price}</p>
+                      <button
                         className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs"
                         onClick={() => {
                           setSelectedService(service)
@@ -296,12 +297,14 @@ export default function SingleClientPage() {
                       >
                         View Details
                       </button>
-                  </div>
-                )
-              })
-            )}
-
+                    </div>
+                  )
+                })
+              )}
+            </div>
           </div>
+
+
 
         </div>
 
@@ -328,11 +331,14 @@ export default function SingleClientPage() {
             onClose={() => setShowServiceModal(false)}
           />
 
-          <AddServiceModal
+        <AddServiceModal
         isOpen={openAddModal}
         onClose={() => setOpenAddModal(false)}
-        clientId={client.id} 
-        services={services}          />
+        clientId={clientId}
+        services={services}
+        onServiceAssigned={fetchClientWithDetails} // 👈 REFRESH SERVICES
+      />
+
     </Layout>
   )
 }

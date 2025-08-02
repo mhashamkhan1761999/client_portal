@@ -1,11 +1,16 @@
 // pages/dashboard.tsx
 
 import React from 'react'
-import Layout from './components/Layout'
+import Layout from '../components/layout/Layout'
 import { useEffect, useState } from 'react'
-import supabase from '../lib/supabaseClient'
+import supabase from 'lib/supabaseClient'
 import { UserGroupIcon, CheckCircleIcon, ClockIcon, XCircleIcon, ArrowTrendingUpIcon, InboxStackIcon } from '@heroicons/react/24/outline'
-import ClientTable from '../components/ClientTable'
+import ClientTable from '../components/clients/ClientTable'
+import { useRouter } from 'next/router'
+import type { Session } from '@supabase/supabase-js'
+
+
+
 
 
 
@@ -13,16 +18,36 @@ import ClientTable from '../components/ClientTable'
 export default function Dashboard() {
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState<Session | null>(null)
+  const router = useRouter()
 
   const currentUserId = 'hardcoded-user-id' // 🔐 Replace with real auth user ID
 
   useEffect(() => {
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) router.push('/login')
+      else setSession(data.session)
+      setLoading(false)
+    })
+    
+    const fetchSession = async () => {
+    const { data, error } = await supabase.auth.getSession()
+      if (data?.session) {
+        setSession(data.session)
+      } else {
+        setSession(null)
+      }
+    }
+
+
     const fetchClients = async () => {
       const { data, error } = await supabase.from('clients').select('*')
       if (!error) setClients(data || [])
       setLoading(false)
     }
 
+    fetchSession()
     fetchClients()
   }, [])
 
@@ -33,6 +58,8 @@ export default function Dashboard() {
   const converted = assignedClients.filter(c => c.status === 'converted')
   const delivered = assignedClients.filter(c => c.status === 'delivered')
   const recentClients = assignedClients.slice(0, 5)
+
+  if(loading) return <div className="text-white">Checking Session...</div>
 
   return (
     

@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import supabase from '../lib/supabaseClient'
-import ClientModal from './ClientModal'
+import supabase from '@/lib/supabaseClient'
+import ClientModal from '../clients/ClientModal'
 
 export default function ClientTable() {
   const [clients, setClients] = useState<any[]>([])

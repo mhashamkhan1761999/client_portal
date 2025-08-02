@@ -1,7 +1,7 @@
 'use client'
 
 import ClientTable from '../../components/ClientTable'
-import Layout from '../components/Layout'
+import Layout from '../../components/Layout'
 
 export default function CompletedClientsPage() {
   return (

@@ -14,7 +14,7 @@
     "jsx": "preserve",
     "incremental": true,
     "types": ["react", "react-dom"],
-    "baseUrl": ".",                         // ✅ Ensure this is set
+    "baseUrl": "src",                         // ✅ Ensure this is set
     "paths": {
       "@/*": ["./*"]                        // ✅ Changed from ./src/* to ./*
     }

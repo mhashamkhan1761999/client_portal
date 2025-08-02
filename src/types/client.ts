@@ -17,7 +17,8 @@ export interface Client {
   platform_name?: string 
   sudo_name?: string // Added for sudo_name from platform
   lead_gen_id?: string // Added for lead generation agent
-  lead_gen_name?: string // Added for lead generation agent name
+  lead_gen_name?: string
+  // Added for lead generation agent name
 }
 
 export interface ClientNote {

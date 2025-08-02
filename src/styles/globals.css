@@ -24,3 +24,20 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+/* Custom Code for Scrollbar */
+
+
+/* globals.css or your component CSS module */
+.scrollbar-custom::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: #1c1c1e;
+}
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: #c29a4b;
+  border-radius: 4px;
+}
+
