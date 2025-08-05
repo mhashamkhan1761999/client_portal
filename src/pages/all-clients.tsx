@@ -293,7 +293,7 @@ return (
         <table className="w-full text-sm text-left text-gray-300">
           <thead className="text-xs text-gray-400 uppercase border-b border-gray-700">
             <tr>
-              <th scope="col" className="px-4 py-3">S/N</th> {/* New Serial Number Column */}
+              <th scope="col" className="px-4 py-3">S/N</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Phone</th>
               <th className="px-4 py-3">Email Address</th>
@@ -310,7 +310,6 @@ return (
               </td>
               <td className="px-4 py-2">{client.client_name}</td>
               <td className="px-4 py-2">{client.phone_numbers?.[0]? formatUSPhone(client.phone_numbers[0]): '-'}</td>
-              {/* <td className="px-4 py-2">{client.phone_numbers?.[0] || '-'}</td> */}
               <td className="px-4 py-2">{client.email_addresses}</td>
               <td className="px-6 py-2">{getStatusBadge(client.status)}</td>
               <td className="px-4 py-2">{formatDate(client.created_at)}</td>

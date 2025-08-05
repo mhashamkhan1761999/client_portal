@@ -22,6 +22,8 @@ const menuItems = [
   { name: 'All Clients', path: '/all-clients' },
   { name: 'Completed', path: '/clients/completed' },
   { name: 'Settings', path: '/settings' },
+  { name: 'User Managment', path: '/admin/users' },
+
 ]
 
 

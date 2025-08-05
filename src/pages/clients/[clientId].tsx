@@ -133,6 +133,7 @@ export default function SingleClientPage() {
   useEffect(() => {
     if (!router.isReady || !clientId || typeof clientId !== 'string') return
     fetchClientWithDetails()
+
   }, [router.isReady, clientId])
 
 
