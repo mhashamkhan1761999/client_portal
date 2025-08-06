@@ -196,17 +196,25 @@ const [searchTerm, setSearchTerm] = useState('')
 
 useEffect(() => {
   const fetchClients = async () => {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .order('created_at', { ascending: false })
+  let query = supabase
+    .from('clients')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error fetching clients:', error.message)
-    } else {
-      setClients(data)
-    }
+  // 👉 In the future, uncomment below to restrict clients per user
+  // if (currentUser?.role !== 'admin') {
+  //   query = query.eq('assigned_to', currentUser.id)
+  // }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Error fetching clients:', error.message)
+  } else {
+    setClients(data)
   }
+}
+
 
   fetchClients()
 }, [])

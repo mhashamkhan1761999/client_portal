@@ -1,5 +1,3 @@
-'use client'
-
 import React, { Fragment, useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
@@ -9,27 +7,15 @@ import ClientModal from '../clients/ClientModal'
 import { Dialog, Transition } from '@headlessui/react'
 import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react'
 
-
-
-
-const menuItems = [
-  { name: 'Dashboard', path: '/dashboard' },
-  { name: 'All Clients', path: '/all-clients' },
-  { name: 'Settings', path: '/settings' },
-  { name: 'User Management', path: '/admin/users' },
-]
-
 export default function Layout({ children }: { children: ReactNode }) {
-
   const supabase = useSupabaseClient()
-
   const router = useRouter()
   const user = useUser()
   const [showAddClient, setShowAddClient] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
 
-  // ✅ Fetch your custom user profile from 'users' table using Supabase user ID
+  // ✅ Fetch user from your 'users' table
   useEffect(() => {
     const fetchCurrentUser = async () => {
       if (!user) return
@@ -54,7 +40,17 @@ export default function Layout({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     router.push('/login')
   }
-  
+
+  // ✅ Menu Items with conditional admin link
+  const menuItems = [
+    { name: 'Dashboard', path: '/dashboard' },
+    { name: 'All Clients', path: '/all-clients' },
+  ]
+
+  if (currentUser?.role === 'admin') {
+    menuItems.push({ name: 'User Management', path: '/admin/users' })
+    menuItems.push({ name: 'Services', path: '/services' })
+  }
 
   return (
     <div className="flex h-screen bg-[#111111] text-white">
@@ -184,3 +180,6 @@ export default function Layout({ children }: { children: ReactNode }) {
     </div>
   )
 }
+
+
+
