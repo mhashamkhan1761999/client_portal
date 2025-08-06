@@ -1,12 +1,19 @@
 import '../styles/globals.css';
-import type { AppProps } from 'next/app';
-import { Toaster } from 'react-hot-toast';
+// src/pages/_app.tsx
+import { useState } from 'react'
+import { AppProps } from 'next/app'
+import { SessionContextProvider } from '@supabase/auth-helpers-react'
+import { createPagesBrowserClient } from '@supabase/auth-helpers-nextjs'
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function MyApp({ Component, pageProps }: AppProps) {
+  const [supabaseClient] = useState(() => createPagesBrowserClient())
+
   return (
-    <>
-      <Toaster position="top-right" reverseOrder={false} />
+    <SessionContextProvider
+      supabaseClient={supabaseClient}
+      initialSession={pageProps.initialSession}
+    >
       <Component {...pageProps} />
-    </>
-  );
+    </SessionContextProvider>
+  )
 }

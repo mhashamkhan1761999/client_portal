@@ -316,10 +316,10 @@ return (
               <td className="px-4 py-2">
                 <div className="flex gap-1">
                   <Link href={`/clients/${client.id}`}>
-                    <button className="bg-blue-600 text-white px-2 py-1 rounded text-xs">View</button>
+                    <button className="bg-blue-600 text-white px-2 py-1 rounded text-xs cursor-pointer">View</button>
                   </Link>
                   <button
-                      className="bg-red-600 text-white px-2 py-1 rounded text-xs"
+                      className="bg-red-600 text-white px-2 py-1 rounded text-xs cursor-pointer hover:bg-red-700"
                       onClick={() => handleDelete(client.id)}
                     >
                       Delete

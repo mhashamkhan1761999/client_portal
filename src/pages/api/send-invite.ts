@@ -13,7 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
-  // Basic email format check (optional)
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)
   if (!isEmail) {
     return res.status(400).json({ error: 'Invalid email address' })
@@ -26,30 +25,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       secure: true,
       auth: {
         user: 'no-reply@metamalistic.com',
-        pass: process.env.SMTP_PASS as string, // ✅ use environment variable
+        pass: process.env.SMTP_PASS!,
       },
     })
 
     const mailOptions = {
       from: '"MetaMalistic" <no-reply@metamalistic.com>',
       to,
-      subject: '🎉 Your MetaMalistic Account Invite',
+      subject: '🎉 You’re Invited to MetaMalistic!',
       html: `
-        <div style="font-family: sans-serif; color: #333; padding: 20px;">
+        <div style="font-family: sans-serif; color: #333; padding: 20px; max-width: 600px;">
           <h2>Hi ${name},</h2>
           <p>You've been invited to join <strong>MetaMalistic</strong> 🎨</p>
-          <p>Click below to set your password and get started:</p>
-          <a href="${link}" style="background-color: #c29a4b; color: black; padding: 10px 20px; border-radius: 5px; display: inline-block; text-decoration: none;">Activate Your Account</a>
-          <p>If you didn’t request this, you can ignore this email.</p>
-          <p>Thanks,<br/>MetaMalistic Team</p>
+          <p>Please click the button below to activate your account and set your password:</p>
+          <p style="text-align: center;">
+            <a href="${link}" style="background-color: #c29a4b; color: black; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+              Activate Your Account
+            </a>
+          </p>
+          <p>If you didn’t request this invite, please ignore this email.</p>
+          <p>Thanks,<br/>The MetaMalistic Team</p>
         </div>
       `,
     }
 
     await transporter.sendMail(mailOptions)
-    res.status(200).json({ success: true })
+
+    return res.status(200).json({ success: true })
   } catch (error: any) {
-    console.error('SMTP Error:', error.message, error.stack)
-    res.status(500).json({ error: 'Failed to send email', details: error.message })
+    console.error('[SMTP ERROR]', error.message)
+    return res.status(500).json({ error: 'Failed to send invite email', details: error.message })
   }
 }

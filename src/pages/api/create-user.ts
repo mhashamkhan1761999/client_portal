@@ -1,15 +1,18 @@
-// pages/api/create-user.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
 import supabaseAdmin from '@/lib/supabaseAdmin'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+
+  const baseUrl = process.env.BASE_URL
+  if (!baseUrl) throw new Error('BASE_URL is missing in environment variables')
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { name, sudo_name, email, work_email, role } = req.body
+  const { name, sudo_name, email, work_email, role, assigned_phones } = req.body
 
-  if (!name || !email || !work_email || !role) {
+  if (!name || !email || !work_email || !role || !assigned_phones?.length) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
@@ -54,7 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
 
     if (userCheckError && userCheckError.code !== 'PGRST116') {
-      // PGRST116 = "No rows found" (which is OK here)
       console.error('[ERROR] Users table check failed:', userCheckError)
       return res.status(500).json({ error: 'User table check failed', details: userCheckError.message })
     }
@@ -67,6 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         email,
         work_email,
         role,
+        assigned_phones,
       })
 
       if (insertError) {
@@ -84,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         type: 'magiclink',
         email: work_email,
         options: {
-          redirectTo: 'https://dashboard.metamalistic.com/set-password',
+          redirectTo: `${baseUrl}/set-password`,
         },
       })
 
@@ -94,21 +97,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const magicLink = magicLinkData.properties.action_link
 
-    // Send invite email
-    const emailRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/send-invite`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: work_email, name, link: magicLink }),
-    })
+    // Try sending the invite
+    let inviteEmailSuccess = false
+    try {
+      const emailRes = await fetch(`${req.headers.origin}/api/send-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: work_email, name, link: magicLink }),
+      })
 
-    if (!emailRes.ok) {
-      return res.status(500).json({ error: 'Failed to send invite email' })
+      if (emailRes.ok) {
+        inviteEmailSuccess = true
+      } else {
+        console.error('Email send failed with status', emailRes.status)
+      }
+    } catch (e) {
+      console.error('Email send failed:', e)
     }
 
     return res.status(200).json({
       message: existingUser ? 'User already existed – invite sent' : 'User created and invited',
       userId,
       magicLink,
+      inviteEmailSuccess,
     })
   } catch (err: any) {
     console.error('[UNEXPECTED ERROR]', err)

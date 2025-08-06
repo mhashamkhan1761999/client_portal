@@ -54,6 +54,7 @@ export default function SingleClientPage() {
 
     if (clientError || !clientData) {
       toast.error('Failed to fetch client.')
+      
       setLoading(false)
       return
     }
@@ -261,6 +262,26 @@ export default function SingleClientPage() {
                 }
               />
               <InfoItem label="Connecting Platform" value={getPlatformLabel(client.connecting_platform)}/>
+              <InfoItem
+                  label="Business Name"
+                  value={
+                    client.business_name ? (
+                      <span className="font-semibold text-white">{client.business_name}</span>
+                    ) : (
+                      '-'
+                    )
+                  }
+                />
+                <InfoItem
+                  label="Secondary Phone Numbers"
+                  value={
+                    Array.isArray(client.secondary_phones) && client.secondary_phones.length > 0
+                      ? client.secondary_phones.join(', ')
+                      : '-'
+                  }
+                />
+
+
               <InfoItem label="Assigned To" value={client?.sudo_name || '-'} />
               <InfoItem label="Gender" value={client.gender} />
               <InfoItem label="Lead Gen Agent" value={client.lead_gen_name || '-'} />
@@ -304,9 +325,6 @@ export default function SingleClientPage() {
               )}
             </div>
           </div>
-
-
-
         </div>
 
 

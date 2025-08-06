@@ -5,15 +5,29 @@ import supabase from '@/lib/supabaseClient'
 import { toast } from 'sonner'
 import router from 'next/router'
 import Layout from '@/components/layout/Layout'
+import { Toaster } from 'sonner'
 
 export default function AdminUserManagement() {
   const [users, setUsers] = useState<any[]>([])
-  const [form, setForm] = useState({
-    name: '',
+
+  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  if (!baseUrl) throw new Error('BASE_URL is missing in environment variables')
+
+  const [phoneInput, setPhoneInput] = useState('')
+  const [form, setForm] = useState<{
+    name: string
+    sudo_name: string
+    email: string
+    work_email: string
+    role: string
+    assigned_phones: string[]
+  }>({
+    name: '', 
     sudo_name: '',
     email: '',
     work_email: '',
     role: 'seller',
+    assigned_phones: [] // Start with one phone
   })
 
   const fetchUsers = async () => {
@@ -50,15 +64,43 @@ export default function AdminUserManagement() {
     }
   }
 
-  const handleCreateUser = async () => {
-    const { name, email, work_email, sudo_name, role } = form
+  const resendMagicLink = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true, // Sends invite if user doesn’t exist
+        emailRedirectTo: `${baseUrl}/set-password`, // Or your desired route
+      },
+    })
 
-    if (!name || !email || !work_email || !role) {
-      toast.error('Missing required fields')
+    if (error) {
+      console.error('Error sending magic link:', error.message)
+      alert('Failed to send invite.')
+    } else {
+      alert('Magic link sent to the user’s email.')
+    }
+  }
+
+  // const deleteUser = async (authUserId: string) => {
+  //   const { error } = await supabase.auth.admin.deleteUser(authUserId);
+    
+  //   if (error) {
+  //     console.error('Failed to delete user:', error.message);
+  //     alert('Error deleting user.');
+  //   } else {
+  //     alert('User deleted successfully.');
+  //     // Optionally: refetch your user list here
+  //   }
+  // };
+
+
+
+  const handleCreateUser = async () => {
+    if (!form.name || !form.email || !form.work_email || !form.role || form.assigned_phones.length === 0) {
+      toast.error('⚠️ Please fill all fields and assign at least one phone number')
       return
     }
 
-    // 1. Create user via API
     const response = await fetch('/api/create-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,61 +110,27 @@ export default function AdminUserManagement() {
     const result = await response.json()
 
     if (!response.ok || !result?.userId) {
-      toast.error('Failed to create user: ' + (result?.details || result?.error || 'Unknown error'))
+      toast.error('❌ Failed to create user: ' + (result?.details || result?.error || 'Unknown error'))
       return
     }
 
-    const userId = result.userId
-
-    // 2. Insert into custom 'users' table
-    const { error: dbError } = await supabase.from('users').insert({
-      id: userId,
-      name,
-      sudo_name,
-      email,
-      work_email,
-      role,
-    })
-
-    if (dbError) {
-      toast.error('DB Error: ' + dbError.message)
-      return
+    // ✅ Show correct toast based on email status
+    if (result.inviteEmailSuccess) {
+      toast.success('✅ User created and invite email sent')
+    } else {
+      toast.success('✅ User created, but invite email failed ❌')
     }
 
-    // 3. Generate magic link
-    const { data: magicLinkData, error: magicLinkError } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: work_email,
-      options: {
-        redirectTo: 'https://dashboard.metamalistic.com/set-password',
-      },
-    })
-
-    if (magicLinkError || !magicLinkData?.properties?.action_link) {
-      toast.error('Magic link error: ' + magicLinkError?.message)
-      return
-    }
-
-    const magicLink = magicLinkData.properties.action_link
-
-    // 4. Send invite email
-    const emailRes = await fetch('/api/send-invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: work_email, name, link: magicLink }),
-    })
-
-    if (!emailRes.ok) {
-      toast.error('Failed to send invite email')
-      return
-    }
-
-    toast.success('User created & invite sent ✅')
-    setForm({ name: '', sudo_name: '', email: '', work_email: '', role: 'seller' })
+    setForm({ name: '', sudo_name: '', email: '', work_email: '', role: 'seller', assigned_phones: [] })
     fetchUsers()
   }
 
+  
+
+
   return (
+    <>
+     <Toaster richColors position="top-right" />
     <Layout>
       <div className="p-6 text-white bg-[#1c1c1e] min-h-screen">
         <h1 className="text-3xl font-bold mb-6">👤 Admin – Manage Users</h1>
@@ -144,6 +152,52 @@ export default function AdminUserManagement() {
             </div>
           ))}
 
+          <div>
+          <label className="block text-sm text-gray-300 mb-1">Assigned Phone Numbers</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Enter phone number"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              className="flex-1 bg-[#111] text-white border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
+            />
+            <button
+              onClick={() => {
+                if (phoneInput.trim()) {
+                    setForm({
+                    ...form,
+                    assigned_phones: [...form.assigned_phones, phoneInput.trim() as string],
+                    })
+                  setPhoneInput('')
+                }
+              }}
+              type="button"
+              className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold hover:bg-yellow-600"
+            >
+              ➕ Add
+            </button>
+          </div>
+          <div className="mt-2 text-sm text-gray-400">
+            {form.assigned_phones.map((phone, idx) => (
+              <span key={idx} className="inline-block bg-gray-700 px-2 py-1 rounded mr-2 mb-1">
+                {phone}{' '}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      assigned_phones: form.assigned_phones.filter((_, i) => i !== idx),
+                    })
+                  }
+                  className="text-red-400 ml-1 hover:text-red-600"
+                >
+                  ✖
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
           <div>
             <label className="block text-sm text-gray-300 mb-1">ROLE</label>
             <select
@@ -176,7 +230,10 @@ export default function AdminUserManagement() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Sudo Name</th>                
+                <th className="px-4 py-3">Assigned Phone Number</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -184,8 +241,10 @@ export default function AdminUserManagement() {
                 <tr key={user.id} className="hover:bg-[#2f2f2f] border-b border-gray-800 transition">
                   <td className="px-4 py-2">{idx + 1}</td>
                   <td className="px-4 py-2">{user.name}</td>
-                  <td className="px-4 py-2">{user.email}</td>
+                  <td className="px-4 py-2">{user.work_email}</td>
                   <td className="px-4 py-2 capitalize">{user.role}</td>
+                  <td className="px-4 py-2 capitalize">{user.sudo_name}</td>
+                  <td className="px-4 py-2 capitalize">{user.assigned_phones}</td>
                   <td className="px-4 py-2">
                     <span
                       className={`text-xs font-semibold px-2 py-1 rounded-full ${
@@ -195,12 +254,28 @@ export default function AdminUserManagement() {
                       {user.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  <td className="px-4 py-2 space-x-2">
+                    <button
+                      onClick={() => resendMagicLink(user.work_email)}
+                      className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600 text-sm"
+                    >
+                      Resend Invite
+                    </button>                    
+                    {/* <button
+                      onClick={() => deleteUser(user.auth_user_id)}
+                      className="bg-red-500 text-white px-4 py-1 rounded hover:bg-red-600 text-sm"
+                    >
+                      Delete User
+                    </button> */}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
       </div>
     </Layout>
+    </>
   )
 }

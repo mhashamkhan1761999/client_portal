@@ -36,6 +36,8 @@ export default function ClientModal({
     profile_url: '',
     platform: '',
     lead_gen_id: '',
+    secondary_phones: [''],
+    business_name: '',
   })
 
   const [users, setUsers] = useState<any[]>([])
@@ -87,6 +89,10 @@ export default function ClientModal({
         profile_url: clientData.profile_url || '',
         platform: clientData.platform || '',
         lead_gen_id: clientData?.lead_gen_id || '',
+        secondary_phones: clientData.secondary_phones || [''],
+        business_name: clientData.business_name || '',
+        
+        
       })
     } else if (currentUser?.role !== 'admin') {
       setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
@@ -110,6 +116,18 @@ export default function ClientModal({
 
   setNumber(data || [])
   }
+  
+    // Secondary Phone Change
+  const handleSecondaryPhoneChange = (index: number, value: string) => {
+    const updated = [...form.secondary_phones];
+    updated[index] = value;
+    setForm({ ...form, secondary_phones: updated });
+  };
+
+  // Add more secondary phone fields
+  const addSecondaryPhoneField = () => {
+    setForm({ ...form, secondary_phones: [...form.secondary_phones, ''] });
+  };
 
 
   const handleChange = (key: string, value: any) => {
@@ -138,6 +156,9 @@ export default function ClientModal({
     }
 
     let clientId: string | null = null
+
+    form.secondary_phones = form.secondary_phones.filter(p => p.trim() !== '')
+
 
     if (clientData) {
       const { data: updated } = await supabase
@@ -215,7 +236,7 @@ export default function ClientModal({
           </div>
            {/* Phone Numbers */}
           <div>
-            <label className="block text-sm mb-1">Phone Number</label>
+            <label className="block text-sm mb-1">Primary Phone Number</label>
               <input
                 type="tel"
                 placeholder="1234567890"
@@ -227,6 +248,40 @@ export default function ClientModal({
                 className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
               />
               {errors.phone_numbers && <p className="text-red-500 text-sm">{errors.phone_numbers}</p>}
+          </div>
+
+
+          {/* Business Name */}
+          <div className="mb-4">
+            <label className="block text-gray-300 mb-1">Business Name (Optional)</label>
+            <input
+              type="text"
+              name="business_name"
+              value={form.business_name || ''}
+              onChange={(e) => handleChange('business_name', e.target.value)}
+              className="w-full px-3 py-2 rounded bg-gray-800 text-white border border-gray-600"
+            />
+          </div>
+
+          {/* Secondary Phone Numbers */}
+          <div className="mb-4">
+            <label className="block text-gray-300 mb-1">Secondary Phone Numbers (Optional)</label>
+            {form.secondary_phones.map((phone, index) => (
+              <input
+                key={index}
+                type="text"
+                value={phone}
+                onChange={(e) => handleSecondaryPhoneChange(index, e.target.value)}
+                className="w-full mb-2 px-3 py-2 rounded bg-gray-800 text-white border border-gray-600"
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addSecondaryPhoneField}
+              className="text-blue-500 text-sm mt-1"
+            >
+              + Add another
+            </button>
           </div>
 
           {/* Work Email */}
