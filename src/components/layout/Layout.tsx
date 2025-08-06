@@ -45,11 +45,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard' },
     { name: 'All Clients', path: '/all-clients' },
+    { name: 'Services', path: '/services' }
   ]
 
   if (currentUser?.role === 'admin') {
     menuItems.push({ name: 'User Management', path: '/admin/users' })
-    menuItems.push({ name: 'Services', path: '/services' })
+    // menuItems.push({ name: 'Services', path: '/services' })
   }
 
   return (

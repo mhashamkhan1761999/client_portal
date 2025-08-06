@@ -9,6 +9,9 @@ import toast from 'react-hot-toast'
 import ClientModal from '@/components/clients/ClientModal'
 import ServiceModal from '@/components/shared/DetailModal' // Adjust the import path as needed
 import AddServiceModal from '../../components/clients/AddServiceModal'
+import FollowUpForm from '@/components/FollowUpForm'
+import dayjs from 'dayjs'
+
 
 
 
@@ -24,6 +27,7 @@ export default function SingleClientPage() {
   const [openAddModal, setOpenAddModal] = useState(false)
   const [services, setServices] = useState<any[]>([])
   const [number, setNumber] = useState<any[]>([])
+  const [followUps, setFollowUps] = useState<ClientFollowUp[]>([])  
 
   const bgColors = [
     'bg-red-600',
@@ -35,6 +39,13 @@ export default function SingleClientPage() {
     'bg-indigo-600',
     'bg-emerald-600',
   ]
+
+  type ClientFollowUp = {
+    id: string
+    reminder_date: string
+    note?: string
+    is_completed: boolean
+  }
 
   const getPlatformLabel = (id: string | undefined) => {
     const platform = number.find((n) => n.id === id)
@@ -65,6 +76,12 @@ export default function SingleClientPage() {
       .select('id, platform, phone_number, assigned_to')
 
     setNumber(numberData || [])
+
+
+    const { data: followUpsData } = await supabase
+      .from('follow_ups')
+      .select('id, reminder_date, note, is_completed')
+      .eq('client_id', clientId)
 
     // 3. Fetch related services
     const { data: servicesData, error: servicesError } = await supabase.from('services').select('*')
@@ -131,9 +148,23 @@ export default function SingleClientPage() {
     setLoading(false)
   }
 
+  const fetchFollowUps = async () => {
+    const { data, error } = await supabase
+      .from('follow_ups')
+      .select('id, reminder_date, note, is_completed')
+      .eq('client_id', clientId)
+
+    if (error) {
+      console.error('Error fetching follow-ups:', error.message)
+    } else {
+      setFollowUps(data as ClientFollowUp[])
+    }
+  }
+
   useEffect(() => {
     if (!router.isReady || !clientId || typeof clientId !== 'string') return
     fetchClientWithDetails()
+    if (clientId) fetchFollowUps()
 
   }, [router.isReady, clientId])
 
@@ -289,8 +320,9 @@ export default function SingleClientPage() {
             </div>
           </div>
 
+         
           {/* Services Section with Smooth Scroll */}
-          <div className="max-h-[500px] overflow-y-auto pr-2 scroll-smooth scrollbar-custom">
+          <div className="max-h-[350px] overflow-y-auto pr-2 scroll-smooth scrollbar-custom">
 
             <div className="grid grid-cols-1 gap-4">
               {clientServices.length === 0 ? (
@@ -327,9 +359,31 @@ export default function SingleClientPage() {
           </div>
         </div>
 
+      <div className="flex gap-4 mt-6">
+        {/* Follow-up Reminders */}
+        <div className="w-1/2 bg-white dark:bg-gray-800 p-4 rounded shadow">
+          <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
+          <ul>
+            {followUps.map((reminder) => (
+              <li key={reminder.id} className="border-b py-2 text-sm flex justify-between">
+                <span>{dayjs(reminder.reminder_date).format('MMM D, YYYY')}</span>
+                <span>{reminder.note || '-'}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4">
+            <FollowUpForm clientId={clientId} onSaved={fetchFollowUps} />
+          </div>
+        </div>
 
         {/* Notes / Assets Section */}
-        <ClientNotes clientId={client.id} currentUser="system_admin" />
+        <div className="w-1/2 bg-white dark:bg-gray-800 p-4 rounded shadow">
+          <ClientNotes clientId={client.id} currentUser="system_admin" />
+        </div>
+      </div>
+
+
+
       </div>
 
       <ClientModal

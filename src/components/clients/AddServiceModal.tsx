@@ -23,11 +23,6 @@ export default function AddServiceModal({
   onServiceAssigned,
 }: AddServiceModalProps) {
   const user = useUser()
-  const userId =
-    process.env.NODE_ENV === 'development'
-      ? 'd65ebfde-ebf2-432d-9bed-85f230db8315'
-      : user?.id
-
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [packageName, setPackageName] = useState('')
   const [price, setPrice] = useState<string>('')
@@ -35,7 +30,7 @@ export default function AddServiceModal({
   const [loading, setLoading] = useState(false)
 
   const handleSave = async () => {
-    if (!selectedServiceId || !clientId || !userId) {
+    if (!selectedServiceId || !clientId || !user?.id) {
       toast.error('Missing required fields')
       return
     }
@@ -52,7 +47,7 @@ export default function AddServiceModal({
         description: description,
         price,
         sold_price: price,
-        created_by: userId,
+        created_by: user?.id,
       })
 
     if (insertError) {
@@ -94,13 +89,13 @@ export default function AddServiceModal({
       client_id: clientId,
       previous_status: null,
       new_status: null,
-      changed_by: userId,
+      changed_by: user?.id,
       note: description,
       service_id: selectedServiceId,
       package_name: packageName,
       service_price: price,
       action_type: 'service_assigned',
-      affected_user: userId,
+      affected_user: user?.id,
     })
 
     toast.success('Service added successfully')
