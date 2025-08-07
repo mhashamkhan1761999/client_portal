@@ -78,12 +78,14 @@ export default function FollowUpForm({
       <label className="block">
         Reminder Date:
         <input
-          type="date"
+          type="datetime-local"
           className="mt-1 w-full border p-2 rounded"
           value={reminderDate}
           onChange={(e) => setReminderDate(e.target.value)}
+          min={new Date().toISOString().slice(0, 16)} // This sets the minimum to now
           required
         />
+
       </label>
 
       <label className="block">

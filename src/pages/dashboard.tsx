@@ -8,6 +8,7 @@ import { UserGroupIcon, CheckCircleIcon, ClockIcon, XCircleIcon, ArrowTrendingUp
 import ClientTable from '../components/clients/ClientTable'
 import { useRouter } from 'next/router'
 import type { Session } from '@supabase/supabase-js'
+import dayjs from 'dayjs'
 
 
 
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const router = useRouter()
+  const [upcomingFollowUps, setUpcomingFollowUps] = useState<any[]>([])
 
   const currentUserId = 'hardcoded-user-id' // 🔐 Replace with real auth user ID
 
@@ -40,6 +42,18 @@ export default function Dashboard() {
       }
     }
 
+    const fetchUpcomingFollowUps = async () => {
+      const { data, error } = await supabase
+        .from('follow_ups')
+        .select('id, reminder_date, note, is_completed, clients(client_name)')
+        .gt('reminder_date', new Date().toISOString())
+        .order('reminder_date', { ascending: true })
+        .limit(10)
+
+      if (!error) setUpcomingFollowUps(data || [])
+    }
+
+
 
     const fetchClients = async () => {
       const { data, error } = await supabase.from('clients').select('*')
@@ -47,6 +61,7 @@ export default function Dashboard() {
       setLoading(false)
     }
 
+    fetchUpcomingFollowUps()
     fetchSession()
     fetchClients()
   }, [])
@@ -76,6 +91,43 @@ export default function Dashboard() {
         <StatCard label="Delivered" count={delivered.length} color="bg-emerald-500" icon={<InboxStackIcon className="h-8 w-8" />} />
 
       </div>
+
+      <h2 className="text-xl font-semibold text-white mb-4">🔔 Upcoming Follow-ups</h2>
+        <div className="space-y-4 mb-10">
+          {upcomingFollowUps.length === 0 ? (
+            <div className="text-sm text-gray-400">No follow-ups scheduled.</div>
+          ) : (
+            upcomingFollowUps.map((item) => (
+              <div
+                key={item.id}
+                className="bg-[#1f1f1f] border border-[#333] p-4 rounded-lg shadow-sm space-y-2"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-xs text-gray-400 uppercase">Client</div>
+                    <div className="text-[#c29a4b] font-semibold">{item.clients?.client_name || 'Unknown Client'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400 uppercase text-right">Reminder Date</div>
+                    <div className="text-white text-sm">{dayjs(item.reminder_date).format('MMM D, YYYY [at] h:mm A')}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-400 uppercase mb-1">Note</div>
+                  <div className="text-sm text-gray-300 italic">{item.note || '-'}</div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full">✅ Done</button>
+                  <button className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-full">❌ Cancel</button>
+                  <button className="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded-full">🔁 Reschedule</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
 
       <h2 className="text-xl font-semibold text-white mb-4">🕐 Recently Added Clients</h2>
       <div className="space-y-4">

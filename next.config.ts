@@ -1,8 +1,18 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
-const nextConfig: NextConfig = {
-  /* config options here */
+const nextConfig = {
   reactStrictMode: true,
-};
+  images: {
+    domains: ['jbrijdsdrtcoscdibzee.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'jbrijdsdrtcoscdibzee.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
+}
 
-export default nextConfig;
+module.exports = nextConfig
+
