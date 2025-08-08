@@ -363,14 +363,6 @@ export default function SingleClientPage() {
         {/* Follow-up Reminders */}
         <div className="w-1/2 bg-white dark:bg-gray-800 p-4 rounded shadow">
           <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
-          <ul>
-            {followUps.map((reminder) => (
-              <li key={reminder.id} className="border-b py-2 text-sm flex justify-between">
-                <span>{dayjs(reminder.reminder_date).format('MMM D, YYYY')}</span>
-                <span>{reminder.note || '-'}</span>
-              </li>
-            ))}
-          </ul>
           <div className="mt-4">
             <FollowUpForm clientId={clientId} onSaved={fetchFollowUps} />
           </div>

@@ -17,6 +17,10 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   // ✅ Fetch user from your 'users' table
   useEffect(() => {
+
+     if (typeof window !== 'undefined' && Notification.permission !== 'granted') {
+        Notification.requestPermission()
+      }
     const fetchCurrentUser = async () => {
       if (!user) return
 
