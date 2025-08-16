@@ -7,6 +7,7 @@ import ClientModal from '../clients/ClientModal'
 import { Dialog, Transition } from '@headlessui/react'
 import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react'
 
+
 export default function Layout({ children }: { children: ReactNode }) {
   const supabase = useSupabaseClient()
   const router = useRouter()

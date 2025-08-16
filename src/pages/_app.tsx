@@ -1,25 +1,28 @@
 import '../styles/globals.css';
-// src/pages/_app.tsx
-import { useState } from 'react'
-import { AppProps } from 'next/app'
-import { SessionContextProvider } from '@supabase/auth-helpers-react'
-import { createPagesBrowserClient } from '@supabase/auth-helpers-nextjs'
+import { useState } from 'react';
+import { AppProps } from 'next/app';
+import { SessionContextProvider } from '@supabase/auth-helpers-react';
+import { createPagesBrowserClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from 'sonner';
+import { AuthProvider } from '@/context/AuthContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 
 export default function MyApp({ Component, pageProps }: AppProps) {
-  const [supabaseClient] = useState(() => createPagesBrowserClient())
+  const [supabaseClient] = useState(() => createPagesBrowserClient());
 
   return (
     <>
-    <Toaster position="top-right" richColors closeButton /> {/* ✅ Required for sonner */}
-    
-    <SessionContextProvider
-      supabaseClient={supabaseClient}
-      initialSession={pageProps.initialSession}
-    >
-      <Component {...pageProps} />
-    </SessionContextProvider>
-  
+      <SessionContextProvider
+        supabaseClient={supabaseClient}
+        initialSession={pageProps.initialSession}
+      >
+        <NotificationProvider>
+        <AuthProvider>
+          <Toaster position="top-right" richColors closeButton />
+          <Component {...pageProps} />
+        </AuthProvider>
+        </NotificationProvider>
+      </SessionContextProvider>
     </>
-  )
+  );
 }

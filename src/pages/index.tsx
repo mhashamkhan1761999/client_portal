@@ -1,25 +1,19 @@
 import { GetServerSidePropsContext } from 'next';
 import { createPagesServerClient } from '@supabase/auth-helpers-nextjs';
-import { useSession } from '@supabase/auth-helpers-react';
 
-export default function Home({ user }: { user: any }) {
-  const session = useSession();
-
-  return (
-    <div>
-      <h1>Welcome, {user?.email}</h1>
-    </div>
-  );
+export default function Home() {
+  return null; // nothing to render because we redirect
 }
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {
-  const supabase = createPagesServerClient(ctx); // ✅ Use server client here
+  const supabase = createPagesServerClient(ctx);
 
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
   if (!session) {
+    // Not logged in → go to login
     return {
       redirect: {
         destination: '/login',
@@ -28,10 +22,11 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
     };
   }
 
+  // Logged in → go to dashboard
   return {
-    props: {
-      initialSession: session,
-      user: session.user,
+    redirect: {
+      destination: '/dashboard',
+      permanent: false,
     },
   };
 }

@@ -4,12 +4,19 @@ import { useEffect, useState } from 'react'
 import supabase from '@/lib/supabaseClient'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 
-// Types
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
 type FollowUpReminder = {
   id?: string
   reminder_date: string
   note?: string
+  user_id?: string
+  added_by?: string
 }
 
 type FollowUpFormProps = {
@@ -28,12 +35,14 @@ export default function FollowUpForm({
   const [reminderDate, setReminderDate] = useState<string>('')
   const [note, setNote] = useState<string>('')
   const [loading, setLoading] = useState(false)
-  const [upcomingReminders, setUpcomingReminders] = useState<any[]>([])
+  const [upcomingReminders, setUpcomingReminders] = useState<FollowUpReminder[]>([])
   const router = useRouter()
 
   useEffect(() => {
-    if (existingReminder) {
-      setReminderDate(existingReminder.reminder_date)
+    if (existingReminder?.reminder_date) {
+      // Parse UTC from DB, convert to PKT for input
+      const local = dayjs.utc(existingReminder.reminder_date).tz('Asia/Karachi').format('YYYY-MM-DDTHH:mm')
+      setReminderDate(local)
       setNote(existingReminder.note || '')
     }
   }, [existingReminder])
@@ -42,48 +51,60 @@ export default function FollowUpForm({
     fetchUpcomingReminders()
   }, [])
 
-  // Fetch the top 2 upcoming reminders for the current user
   const fetchUpcomingReminders = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     const { data, error } = await supabase
       .from('follow_ups')
-      .select('*')
+      .select('*, users:user_id(name)')
       .eq('is_completed', false)
+      .eq('client_id', clientId)
       .order('reminder_date', { ascending: true })
-      .limit(2) // limit to 2
 
     if (error) {
       console.error('Error fetching reminders:', error.message)
       return
     }
 
-    setUpcomingReminders(data || [])
+    // Filter only upcoming (future) reminders
+    const upcoming = (data || []).filter((r: any) =>
+      dayjs(r.reminder_date).isAfter(dayjs())
+    )
+
+    // Map added_by name
+    const mapped = upcoming.map((r: any) => ({
+      ...r,
+      added_by: r.users?.name || 'Unknown',
+    }))
+
+    setUpcomingReminders(mapped.slice(0, 2)) // only top 2
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
     if (userError || !user) {
       console.error('User not authenticated')
       setLoading(false)
       return
     }
 
+    if (!reminderDate) {
+      toast.error('Please select a reminder date')
+      setLoading(false)
+      return
+    }
+
+    // Convert PKT → UTC
+    const utcTime = dayjs.tz(reminderDate, 'Asia/Karachi').utc().format()
+
     const payload = {
       client_id: clientId,
       user_id: user.id,
-      reminder_date: reminderDate,
+      reminder_date: utcTime,
       note,
       is_completed: false,
     }
@@ -106,24 +127,11 @@ export default function FollowUpForm({
       return
     }
 
-    const formattedDate = new Date(reminderDate).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
+    toast.success(`Reminder saved for ${dayjs(reminderDate).format('MMM D, YYYY h:mm A')}`)
 
-    toast.success(`Reminder saved for ${formattedDate}`)
-
-    // Clear form
     setReminderDate('')
     setNote('')
-
-    // Refresh top reminders
     await fetchUpcomingReminders()
-
     onSaved?.()
     onClose?.()
   }
@@ -132,23 +140,17 @@ export default function FollowUpForm({
     <div className="space-y-4 p-4 bg-white dark:bg-gray-900 rounded shadow">
       {/* Top 2 upcoming reminders */}
       <div className="mt-4 p-3 border rounded">
-        <h3 className="font-bold mb-2">Top 2 Upcoming Reminders</h3>
+        <h3 className="font-bold mb-2">Upcoming Reminders</h3>
         {upcomingReminders.length === 0 ? (
           <p className="text-sm text-gray-500">No upcoming reminders</p>
         ) : (
           <ul>
             {upcomingReminders.map((reminder) => (
               <li key={reminder.id} className="text-sm py-1">
-                📅{' '}
-                {new Date(reminder.reminder_date).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true,
-                })}{' '}
-                — {reminder.note || 'No note'}
+                📅 {dayjs.utc(reminder.reminder_date).tz('Asia/Karachi').format('MMM D, YYYY h:mm A')}
+                {' — '}
+                {reminder.note || 'No note'}{' '}
+                <span className="text-gray-400 italic">— Added by {reminder.added_by}</span>
               </li>
             ))}
           </ul>
@@ -164,7 +166,7 @@ export default function FollowUpForm({
             className="mt-1 w-full border p-2 rounded"
             value={reminderDate}
             onChange={(e) => setReminderDate(e.target.value)}
-            min={new Date().toISOString().slice(0, 16)}
+            min={dayjs().tz('Asia/Karachi').format('YYYY-MM-DDTHH:mm')}
             required
           />
         </label>
