@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -12,6 +13,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const type = hashParams.get('type')
+    const accessToken = hashParams.get('access_token')
+
+    if (type === 'recovery' && accessToken) {
+      router.replace(`/set-password${window.location.hash}`)
+    }
+  }, [router])
 
   // Login handler (works on Enter key)
   const handleLogin = async (e?: React.FormEvent) => {
@@ -37,7 +48,7 @@ export default function LoginPage() {
     setLoading(true)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'http://localhost:3000/login', // redirect to login after email click
+      redirectTo: `${window.location.origin}/set-password`,
     })
 
     if (error) toast.error(error.message)

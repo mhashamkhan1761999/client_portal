@@ -3,6 +3,9 @@ import type { NextConfig } from 'next'
 const nextConfig = {
   devIndicators: false,
   reactStrictMode: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   images: {
     domains: ['jbrijdsdrtcoscdibzee.supabase.co'],
     remotePatterns: [

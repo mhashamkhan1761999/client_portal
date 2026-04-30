@@ -37,9 +37,6 @@ export default function AdminUserManagement() {
     nature: "",
   });
 
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-  if (!baseUrl) throw new Error('BASE_URL is missing in environment variables')
-
   const [phoneInput, setPhoneInput] = useState('')
   const [form, setForm] = useState<{
     name: string
@@ -94,11 +91,13 @@ export default function AdminUserManagement() {
   }
 
   const resendMagicLink = async (email: string) => {
+    const appUrl = window.location.origin
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${baseUrl}/set-password`,
+        emailRedirectTo: `${appUrl}/set-password`,
       },
     })
 

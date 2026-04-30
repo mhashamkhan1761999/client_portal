@@ -3,7 +3,7 @@ import supabaseAdmin from '@/lib/supabaseAdmin'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  const baseUrl = process.env.BASE_URL
+  const baseUrl = process.env.BASE_URL?.replace(/\/$/, '')
   if (!baseUrl) throw new Error('BASE_URL is missing in environment variables')
 
   if (req.method !== 'POST') {
@@ -81,21 +81,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('[INFO] User already exists in users table.')
     }
 
-    // Generate magic link
-    const { data: magicLinkData, error: magicLinkError } =
+    // Generate a password setup link for the invited user.
+    const { data: inviteLinkData, error: inviteLinkError } =
       await supabaseAdmin.auth.admin.generateLink({
-        type: 'magiclink',
+        type: 'recovery',
         email: work_email,
         options: {
           redirectTo: `${baseUrl}/set-password`,
         },
       })
 
-    if (magicLinkError || !magicLinkData?.properties?.action_link) {
-      return res.status(500).json({ error: 'Magic Link Error', details: magicLinkError?.message })
+    if (inviteLinkError || !inviteLinkData?.properties?.action_link) {
+      return res.status(500).json({ error: 'Invite Link Error', details: inviteLinkError?.message })
     }
 
-    const magicLink = magicLinkData.properties.action_link
+    const inviteLink = inviteLinkData.properties.action_link
 
     // Try sending the invite
     let inviteEmailSuccess = false
@@ -103,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const emailRes = await fetch(`${req.headers.origin}/api/send-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: work_email, name, link: magicLink }),
+        body: JSON.stringify({ to: work_email, name, link: inviteLink }),
       })
 
       if (emailRes.ok) {
@@ -118,7 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       message: existingUser ? 'User already existed – invite sent' : 'User created and invited',
       userId,
-      magicLink,
+      inviteLink,
       inviteEmailSuccess,
     })
   } catch (err: any) {

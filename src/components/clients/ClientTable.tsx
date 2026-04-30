@@ -9,7 +9,11 @@ import ClientModal from '../clients/ClientModal'
 
 
 
-export default function ClientTable() {
+type ClientTableProps = {
+  statusFilter?: string
+}
+
+export default function ClientTable({ statusFilter }: ClientTableProps) {
   const [clients, setClients] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
   const [editingClient, setEditingClient] = useState<any>(null)
@@ -36,7 +40,7 @@ export default function ClientTable() {
 
 
   const fetchClients = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('clients')
       .select(`
         *,
@@ -47,7 +51,14 @@ export default function ClientTable() {
           is_completed
         )
       `)
-      .order('created_at', { ascending: false }).limit(10)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (statusFilter) {
+      query = query.eq('status', statusFilter)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Error fetching clients:', error)
