@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import supabase from '../../lib/supabaseClient'
 import { useRouter } from 'next/navigation';
 import { CLIENT_STATUSES } from '@/lib/clientStatus'
+import { LEAD_NATURE_OPTIONS } from '@/lib/leadNature'
 
 export default function ClientModal({
   open,
@@ -37,6 +38,7 @@ export default function ClientModal({
     profile_url: '',
     platform: '',
     lead_gen_id: '',
+    lead_nature: '',
     secondary_phones: [''],
     business_name: '',
   })
@@ -88,6 +90,7 @@ export default function ClientModal({
         profile_url: clientData.profile_url || '',
         platform: clientData.platform || '',
         lead_gen_id: clientData?.lead_gen_id || '',
+        lead_nature: clientData?.lead_nature || '',
         secondary_phones: clientData.secondary_phones || [''],
         business_name: clientData.business_name || '',
         
@@ -144,6 +147,7 @@ export default function ClientModal({
       work_email: form.work_email.trim(),
       profile_url: form.profile_url.trim(),
       website_url: form.website_url.trim(),
+      lead_nature: form.lead_nature,
       secondary_phones: form.secondary_phones.map((phone) => phone.trim()).filter(Boolean),
     }
 
@@ -205,11 +209,29 @@ export default function ClientModal({
       const { data: inserted, error } = await supabase.from('clients').insert([normalizedForm]).select('id').single()
 
       if (error || !inserted) {
-        toast.error('Failed to insert client')
+        console.error('Failed to insert client:', error)
+        toast.error(error?.message || 'Failed to insert client')
         return
       }
 
       clientId = inserted.id
+
+      if (normalizedForm.assigned_to) {
+        const { data: authData } = await supabase.auth.getUser()
+        await supabase.from('lead_transfers').insert({
+          client_id: clientId,
+          lead_gen_id: normalizedForm.lead_gen_id || null,
+          from_user_id: null,
+          to_user_id: normalizedForm.assigned_to,
+          transferred_by: authData.user?.id || null,
+          transfer_type: 'initial_assignment',
+          reason: null,
+          note: 'Initial assignment',
+          client_status_at_transfer: normalizedForm.status || null,
+          lead_nature: normalizedForm.lead_nature || null,
+        })
+      }
+
       toast.success('Client added successfully')
     }
 
@@ -460,6 +482,22 @@ export default function ClientModal({
                 ))}
               </select>
             </div>
+
+          <div>
+            <label className="block text-sm mb-1">Lead Nature</label>
+            <select
+              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+              value={form.lead_nature}
+              onChange={(e) => handleChange('lead_nature', e.target.value)}
+            >
+              <option value="">Select Lead Nature</option>
+              {LEAD_NATURE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Service */}
           {/* <div>

@@ -12,12 +12,16 @@ import AddServiceModal from '../../components/clients/AddServiceModal'
 import FollowUpForm from '@/components/FollowUpForm'
 import dayjs from 'dayjs'
 import { getClientStatusLabel } from '@/lib/clientStatus'
+import { getLeadNatureLabel } from '@/lib/leadNature'
+import { TRANSFER_REASONS, getTransferReasonLabel } from '@/lib/leadTransfer'
+import { useAuth } from '@/context/AuthContext'
 
 
 
 
 export default function SingleClientPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const { clientId } = router.query
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,6 +34,12 @@ export default function SingleClientPage() {
   const [number, setNumber] = useState<any[]>([])
   const [followUps, setFollowUps] = useState<ClientFollowUp[]>([])  
   const [transferLogs, setTransferLogs] = useState<TransferLog[]>([])
+  const [users, setUsers] = useState<{ id: string; name?: string; sudo_name?: string; role?: string }[]>([])
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferTo, setTransferTo] = useState('')
+  const [transferReason, setTransferReason] = useState('')
+  const [transferNote, setTransferNote] = useState('')
+  const [transferLoading, setTransferLoading] = useState(false)
 
   const bgColors = [
     'bg-red-600',
@@ -58,8 +68,12 @@ export default function SingleClientPage() {
     affected_user?: string | null
     action_type?: string | null
     note?: string | null
+    reason?: string | null
+    transfer_type?: string | null
     changed_by_name?: string
     affected_user_name?: string
+    from_user_name?: string
+    to_user_name?: string
   }
 
   const getPlatformLabel = (id: string | undefined) => {
@@ -91,6 +105,13 @@ export default function SingleClientPage() {
       .select('id, platform, phone_number, assigned_to')
 
     setNumber(numberData || [])
+
+    const { data: usersData } = await supabase
+      .from('users')
+      .select('id, name, sudo_name, role')
+      .eq('is_active', true)
+
+    setUsers(usersData || [])
 
 
     const { data: followUpsData } = await supabase
@@ -165,23 +186,48 @@ export default function SingleClientPage() {
   }
 
   const fetchTransferLogs = async (id: string) => {
-    const { data: logs, error } = await supabase
+    const { data: statusLogs } = await supabase
       .from('status_logs')
       .select('id, created_at, previous_status, new_status, changed_by, affected_user, action_type, note')
       .eq('client_id', id)
       .in('action_type', ['client_transferred', 'status_changed', 'service_assigned'])
-      .order('created_at', { ascending: false })
+
+    const { data: leadTransfers, error } = await supabase
+      .from('lead_transfers')
+      .select('id, created_at, from_user_id, to_user_id, transferred_by, transfer_type, reason, note, client_status_at_transfer, lead_nature')
+      .eq('client_id', id)
 
     if (error) {
       console.error('Error fetching transfer history:', error.message)
-      setTransferLogs([])
-      return
     }
+
+    const normalizedStatusLogs = (statusLogs || []).map((log: any) => ({
+      ...log,
+      transfer_type: log.action_type,
+    }))
+
+    const normalizedTransfers = (leadTransfers || []).map((transfer: any) => ({
+      id: transfer.id,
+      created_at: transfer.created_at,
+      previous_status: transfer.client_status_at_transfer,
+      new_status: transfer.client_status_at_transfer,
+      changed_by: transfer.transferred_by,
+      affected_user: transfer.to_user_id,
+      from_user_id: transfer.from_user_id,
+      to_user_id: transfer.to_user_id,
+      transfer_type: transfer.transfer_type,
+      reason: transfer.reason,
+      note: transfer.note,
+    }))
+
+    const logs = [...normalizedStatusLogs, ...normalizedTransfers].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
 
     const userIds = Array.from(
       new Set(
         (logs || [])
-          .flatMap((log: TransferLog) => [log.changed_by, log.affected_user])
+          .flatMap((log: any) => [log.changed_by, log.affected_user, log.from_user_id, log.to_user_id])
           .filter(Boolean)
       )
     ) as string[]
@@ -199,12 +245,64 @@ export default function SingleClientPage() {
     }
 
     setTransferLogs(
-      (logs || []).map((log: TransferLog) => ({
+      (logs || []).map((log: any) => ({
         ...log,
         changed_by_name: log.changed_by ? userMap[log.changed_by] || log.changed_by : '-',
         affected_user_name: log.affected_user ? userMap[log.affected_user] || log.affected_user : '-',
+        from_user_name: log.from_user_id ? userMap[log.from_user_id] || log.from_user_id : '-',
+        to_user_name: log.to_user_id ? userMap[log.to_user_id] || log.to_user_id : '-',
       }))
     )
+  }
+
+  const canWorkClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
+
+  const handleTransferLead = async () => {
+    if (!user || !client || !clientId || typeof clientId !== 'string') return
+    if (!transferTo) return toast.error('Please select who should receive this lead.')
+    if (transferTo === client.assigned_to) return toast.error('This lead is already assigned to that user.')
+    if (!transferReason) return toast.error('Please select a transfer reason.')
+
+    setTransferLoading(true)
+
+    const { error: updateError } = await supabase
+      .from('clients')
+      .update({ assigned_to: transferTo })
+      .eq('id', clientId)
+
+    if (updateError) {
+      toast.error('Failed to transfer lead.')
+      console.error(updateError)
+      setTransferLoading(false)
+      return
+    }
+
+    const { error: transferError } = await supabase.from('lead_transfers').insert({
+      client_id: clientId,
+      lead_gen_id: client.lead_gen_id || null,
+      from_user_id: client.assigned_to || null,
+      to_user_id: transferTo,
+      transferred_by: user.id,
+      transfer_type: 'transfer',
+      reason: transferReason,
+      note: transferNote.trim() || null,
+      client_status_at_transfer: client.status || null,
+      lead_nature: client.lead_nature || null,
+    })
+
+    if (transferError) {
+      toast.error('Lead owner changed, but transfer history failed to save.')
+      console.error(transferError)
+    } else {
+      toast.success('Lead transferred successfully.')
+    }
+
+    setShowTransferModal(false)
+    setTransferTo('')
+    setTransferReason('')
+    setTransferNote('')
+    setTransferLoading(false)
+    await fetchClientWithDetails()
   }
 
   const fetchFollowUps = async () => {
@@ -273,14 +371,23 @@ export default function SingleClientPage() {
               </Link>
 
               
-              <button onClick={() => setOpenAddModal(true)} className="bg-green-700 hover:bg-green-600 text-white text-sm px-4 py-2 rounded">
+              <button
+                className="bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded"
+                onClick={() => setShowTransferModal(true)}
+                disabled={!canWorkClient}
+              >
+                Transfer Lead
+              </button>
+
+              <button onClick={() => setOpenAddModal(true)} disabled={!canWorkClient} className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
                 ➕ Add Service
               </button>
               
             
               <button
-                className="bg-yellow-500 hover:bg-yellow-400 text-black text-sm px-4 py-2 rounded"
+                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black text-sm px-4 py-2 rounded"
                 onClick={() => setShowEditModal(true)}
+                disabled={!canWorkClient}
               >
                 Edit Client Info
               </button>
@@ -375,6 +482,7 @@ export default function SingleClientPage() {
               <InfoItem label="Assigned To" value={client?.sudo_name || '-'} />
               <InfoItem label="Gender" value={client.gender} />
               <InfoItem label="Lead Gen Agent" value={client.lead_gen_name || '-'} />
+              <InfoItem label="Lead Nature" value={getLeadNatureLabel(client.lead_nature)} />
               <InfoItem label="Created At" value={new Date(client.created_at).toLocaleString()} />
             </div>
           </div>
@@ -428,7 +536,7 @@ export default function SingleClientPage() {
                 <div key={log.id} className="border border-gray-700 rounded p-3 text-sm">
                   <div className="flex flex-wrap justify-between gap-2">
                     <span className="font-medium capitalize">
-                      {(log.action_type || 'status_changed').replace('_', ' ')}
+                      {(log.transfer_type || log.action_type || 'status_changed').replace('_', ' ')}
                     </span>
                     <span className="text-gray-400">{new Date(log.created_at).toLocaleString()}</span>
                   </div>
@@ -438,8 +546,11 @@ export default function SingleClientPage() {
                     <span>{getClientStatusLabel(log.new_status || '')}</span>
                   </div>
                   <div className="mt-1 text-gray-400">
-                    Changed by {log.changed_by_name || '-'}; transferred/assigned to {log.affected_user_name || '-'}
+                    {log.transfer_type === 'transfer' || log.transfer_type === 'initial_assignment'
+                      ? `From ${log.from_user_name || '-'} to ${log.to_user_name || log.affected_user_name || '-'}`
+                      : `Changed by ${log.changed_by_name || '-'}; transferred/assigned to ${log.affected_user_name || '-'}`}
                   </div>
+                  {log.reason && <div className="mt-1 text-gray-400">Reason: {getTransferReasonLabel(log.reason)}</div>}
                   {log.note && <div className="mt-1 text-gray-300">{log.note}</div>}
                 </div>
               ))}
@@ -477,6 +588,73 @@ export default function SingleClientPage() {
           currentUser="system_admin"
           isServiceEditable={false}
         />
+
+      {showTransferModal && client && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-[#1c1c1e] text-white rounded-xl p-6 w-full max-w-lg border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-[#c29a4b]">Transfer Lead</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm mb-1">Transfer To</label>
+                <select
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                >
+                  <option value="">Select seller</option>
+                  {users
+                    .filter((item) => item.id !== client.assigned_to)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.sudo_name || item.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Reason</label>
+                <select
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                >
+                  <option value="">Select reason</option>
+                  {TRANSFER_REASONS.map((reason) => (
+                    <option key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Note</label>
+                <textarea
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 min-h-24"
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="Optional transfer context"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
+                  onClick={() => setShowTransferModal(false)}
+                  disabled={transferLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded"
+                  onClick={handleTransferLead}
+                  disabled={transferLoading}
+                >
+                  {transferLoading ? 'Transferring...' : 'Transfer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
         <ServiceModal
             service={selectedService}

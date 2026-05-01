@@ -5,6 +5,7 @@ import supabase from "@/lib/supabaseClient";
 import { StatCard } from "./StatCard";
 import UserStatsTable from "./UserStatsTable";
 import FollowUpStats from "./FollowUpStats";
+import { getLeadNatureLabel } from "@/lib/leadNature";
 
 type UserStat = {
   id: string;
@@ -22,6 +23,22 @@ type UserStat = {
   followUpsRescheduled: number;
 };
 
+type TransferStat = {
+  userId: string;
+  name: string;
+  sent: number;
+  received: number;
+  pairs: Record<string, number>;
+};
+
+type LeadGenStat = {
+  id: string;
+  name: string;
+  connected: number;
+  converted: number;
+  byNature: Record<string, { connected: number; converted: number; total: number }>;
+};
+
 const now = new Date();
 
 export default function AnalyticsDashboard({ currentUser }: { currentUser: any }) {
@@ -29,6 +46,8 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
   const [loading, setLoading] = useState(true);
   const [totalClients, setTotalClients] = useState(0);
   const [totalSalesAllUsers, setTotalSalesAllUsers] = useState(0);
+  const [transferStats, setTransferStats] = useState<TransferStat[]>([]);
+  const [leadGenStats, setLeadGenStats] = useState<LeadGenStat[]>([]);
 
   // Filter state (example: "month" | "quarter" | "year")
   const [filter, setFilter] = useState<"month" | "quarter" | "year">("month");
@@ -67,6 +86,14 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     const stats: UserStat[] = [];
     let allClientsCount = 0;
     let totalSalesCount = 0;
+
+    const { data: allTransfers } = await supabase
+      .from("lead_transfers")
+      .select("from_user_id, to_user_id, transfer_type");
+
+    const { data: allClientsForLeadGen } = await supabase
+      .from("clients")
+      .select("id, status, lead_gen_id, lead_nature");
 
     for (const user of users) {
       if (!isAdmin && user.id !== currentUser) continue; // Filter for normal users
@@ -135,6 +162,53 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     setUserStats(stats);
     setTotalClients(allClientsCount);
     setTotalSalesAllUsers(isAdmin ? totalSalesCount : 0);
+
+    const userNameMap = Object.fromEntries(users.map((item: any) => [item.id, item.name || item.id]));
+
+    setTransferStats(
+      users.map((item: any) => {
+        const sentTransfers = (allTransfers || []).filter((transfer: any) => transfer.from_user_id === item.id);
+        const receivedTransfers = (allTransfers || []).filter((transfer: any) => transfer.to_user_id === item.id);
+        const pairs: Record<string, number> = {};
+
+        sentTransfers.forEach((transfer: any) => {
+          const receiver = transfer.to_user_id ? userNameMap[transfer.to_user_id] || transfer.to_user_id : "Unknown";
+          pairs[receiver] = (pairs[receiver] || 0) + 1;
+        });
+
+        return {
+          userId: item.id,
+          name: item.name,
+          sent: sentTransfers.length,
+          received: receivedTransfers.length,
+          pairs,
+        };
+      })
+    );
+
+    setLeadGenStats(
+      (leadAgents || []).map((agent: any) => {
+        const leadClients = (allClientsForLeadGen || []).filter((client: any) => client.lead_gen_id === agent.id);
+        const byNature: Record<string, { connected: number; converted: number; total: number }> = {};
+
+        leadClients.forEach((client: any) => {
+          const nature = getLeadNatureLabel(client.lead_nature);
+          byNature[nature] ||= { connected: 0, converted: 0, total: 0 };
+          byNature[nature].total += 1;
+          if (client.status === "connected" || client.status === "converted") byNature[nature].connected += 1;
+          if (client.status === "converted") byNature[nature].converted += 1;
+        });
+
+        return {
+          id: agent.id,
+          name: agent.name,
+          connected: leadClients.filter((client: any) => client.status === "connected" || client.status === "converted").length,
+          converted: leadClients.filter((client: any) => client.status === "converted").length,
+          byNature,
+        };
+      })
+    );
+
     setLoading(false);
   };
     useEffect(() => {
@@ -143,6 +217,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     // Create a real-time channel
     const channel = supabase.channel('analytics-live')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAnalytics())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_transfers' }, () => fetchAnalytics())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'client_service_sales' }, () => fetchAnalytics())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'follow_ups' }, () => fetchAnalytics())
         .subscribe();
@@ -189,6 +264,51 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
 
       {/* User Stats */}
       <UserStatsTable stats={userStats} />
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Transfer Report</h2>
+        {transferStats.map((item) => (
+          <div key={item.userId} className="p-4 bg-gray-900 rounded-xl">
+            <h3 className="font-bold mb-3">{item.name}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Transfers Sent" count={item.sent} color="bg-purple-600" />
+              <StatCard label="Transfers Received" count={item.received} color="bg-cyan-600" />
+            </div>
+            {Object.keys(item.pairs).length > 0 && (
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(item.pairs).map(([receiver, count]) => (
+                  <StatCard key={receiver} label={`To ${receiver}`} count={count} color="bg-gray-700" />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Lead Gen Performance</h2>
+        {leadGenStats.map((agent) => (
+          <div key={agent.id} className="p-4 bg-gray-900 rounded-xl">
+            <h3 className="font-bold mb-3">{agent.name}</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Connected Leads" count={agent.connected} color="bg-cyan-600" />
+              <StatCard label="Converted Leads" count={agent.converted} color="bg-green-600" />
+            </div>
+            {Object.entries(agent.byNature).length > 0 && (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {Object.entries(agent.byNature).map(([nature, counts]) => (
+                  <div key={nature} className="rounded bg-gray-800 p-3 text-sm">
+                    <div className="font-semibold">{nature}</div>
+                    <div className="text-gray-300">Total: {counts.total}</div>
+                    <div className="text-gray-300">Connected: {counts.connected}</div>
+                    <div className="text-gray-300">Converted: {counts.converted}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
