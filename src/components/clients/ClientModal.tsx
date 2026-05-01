@@ -218,16 +218,14 @@ export default function ClientModal({
 
       if (normalizedForm.assigned_to) {
         const { data: authData } = await supabase.auth.getUser()
-        await supabase.from('lead_transfers').insert({
+        await supabase.from('client_assignments').insert({
           client_id: clientId,
+          user_id: normalizedForm.assigned_to,
+          assigned_by: authData.user?.id || null,
           lead_gen_id: normalizedForm.lead_gen_id || null,
-          from_user_id: null,
-          to_user_id: normalizedForm.assigned_to,
-          transferred_by: authData.user?.id || null,
-          transfer_type: 'initial_assignment',
-          reason: null,
-          note: 'Initial assignment',
-          client_status_at_transfer: normalizedForm.status || null,
+          assignment_type: 'primary',
+          status: normalizedForm.status || 'connected',
+          remarks: 'Initial assignment',
           lead_nature: normalizedForm.lead_nature || null,
         })
       }

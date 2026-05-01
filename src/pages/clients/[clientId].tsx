@@ -14,6 +14,7 @@ import dayjs from 'dayjs'
 import { getClientStatusLabel } from '@/lib/clientStatus'
 import { getLeadNatureLabel } from '@/lib/leadNature'
 import { TRANSFER_REASONS, getTransferReasonLabel } from '@/lib/leadTransfer'
+import { ASSIGNMENT_STATUSES, getAssignmentStatusLabel } from '@/lib/clientAssignment'
 import { useAuth } from '@/context/AuthContext'
 
 
@@ -40,17 +41,12 @@ export default function SingleClientPage() {
   const [transferReason, setTransferReason] = useState('')
   const [transferNote, setTransferNote] = useState('')
   const [transferLoading, setTransferLoading] = useState(false)
-
-  const bgColors = [
-    'bg-red-600',
-    'bg-blue-600',
-    'bg-green-600',
-    'bg-purple-600',
-    'bg-yellow-600',
-    'bg-pink-600',
-    'bg-indigo-600',
-    'bg-emerald-600',
-  ]
+  const [assignments, setAssignments] = useState<ClientAssignment[]>([])
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false)
+  const [assignmentUserId, setAssignmentUserId] = useState('')
+  const [assignmentStatus, setAssignmentStatus] = useState('connected')
+  const [assignmentRemarks, setAssignmentRemarks] = useState('')
+  const [assignmentLoading, setAssignmentLoading] = useState(false)
 
   type ClientFollowUp = {
     id: string
@@ -74,6 +70,21 @@ export default function SingleClientPage() {
     affected_user_name?: string
     from_user_name?: string
     to_user_name?: string
+  }
+
+  type ClientAssignment = {
+    id: string
+    user_id: string
+    assigned_by?: string | null
+    assignment_type?: string | null
+    status?: string | null
+    remarks?: string | null
+    created_at?: string
+    updated_at?: string
+    users?: {
+      name?: string
+      sudo_name?: string
+    } | null
   }
 
   const getPlatformLabel = (id: string | undefined) => {
@@ -182,7 +193,34 @@ export default function SingleClientPage() {
 
     setClientServices(serviceDetails)
     await fetchTransferLogs(clientId)
+    await fetchAssignments(clientId)
     setLoading(false)
+  }
+
+  const fetchAssignments = async (id: string) => {
+    const { data, error } = await supabase
+      .from('client_assignments')
+      .select(`
+        id,
+        user_id,
+        assigned_by,
+        assignment_type,
+        status,
+        remarks,
+        created_at,
+        updated_at,
+        users:user_id(name, sudo_name)
+      `)
+      .eq('client_id', id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching connected people:', error.message)
+      setAssignments([])
+      return
+    }
+
+    setAssignments((data || []) as ClientAssignment[])
   }
 
   const fetchTransferLogs = async (id: string) => {
@@ -255,7 +293,53 @@ export default function SingleClientPage() {
     )
   }
 
-  const canWorkClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
+  const isConnectedUser = Boolean(user && assignments.some((assignment) => assignment.user_id === user.id))
+  const canEditMainClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
+  const canWorkClient = Boolean(canEditMainClient || isConnectedUser)
+
+  const openAddAssignmentModal = () => {
+    setAssignmentUserId('')
+    setAssignmentStatus('connected')
+    setAssignmentRemarks('')
+    setShowAssignmentModal(true)
+  }
+
+  const handleSaveAssignment = async () => {
+    if (!user || !client || !clientId || typeof clientId !== 'string') return
+    if (!assignmentUserId) return toast.error('Please select a person.')
+
+    setAssignmentLoading(true)
+
+    const existing = assignments.find((assignment) => assignment.user_id === assignmentUserId)
+    const payload = {
+      client_id: clientId,
+      user_id: assignmentUserId,
+      assigned_by: user.id,
+      lead_gen_id: client.lead_gen_id || null,
+      assignment_type: assignmentUserId === client.assigned_to ? 'primary' : 'connected',
+      status: assignmentStatus,
+      remarks: assignmentRemarks.trim() || null,
+      lead_nature: client.lead_nature || null,
+    }
+
+    const result = existing
+      ? await supabase.from('client_assignments').update(payload).eq('id', existing.id)
+      : await supabase.from('client_assignments').insert(payload)
+
+    if (result.error) {
+      console.error(result.error)
+      toast.error('Failed to save connected person.')
+    } else {
+      toast.success('Connected person saved.')
+      setShowAssignmentModal(false)
+      setAssignmentUserId('')
+      setAssignmentStatus('connected')
+      setAssignmentRemarks('')
+      await fetchAssignments(clientId)
+    }
+
+    setAssignmentLoading(false)
+  }
 
   const handleTransferLead = async () => {
     if (!user || !client || !clientId || typeof clientId !== 'string') return
@@ -343,6 +427,24 @@ export default function SingleClientPage() {
 
   if (!clientId || typeof clientId !== 'string') return <div className="text-red-500 p-8">Invalid client ID.</div>
 
+  if (!canWorkClient) {
+    return (
+      <Layout>
+        <div className="mt-6 rounded-lg border border-gray-800 bg-[#1c1c1e] p-6 text-white">
+          <h1 className="text-xl font-semibold">Access restricted</h1>
+          <p className="mt-2 text-sm text-gray-400">
+            This client is visible only to the primary owner, connected people, and admins.
+          </p>
+          <Link href="/all-clients">
+            <button className="mt-4 rounded bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600">
+              Back to Clients
+            </button>
+          </Link>
+        </div>
+      </Layout>
+    )
+  }
+
   
   return (
     
@@ -371,26 +473,39 @@ export default function SingleClientPage() {
               </Link>
 
               
+              {canEditMainClient && (
+                <>
               <button
-                className="bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded"
+                className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded"
                 onClick={() => setShowTransferModal(true)}
-                disabled={!canWorkClient}
               >
                 Transfer Lead
               </button>
+                </>
+              )}
+             
+              {canEditMainClient && (
+                <>
+              <button
+                className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded"
+                onClick={openAddAssignmentModal}
+              >
+                Add Connected Person
+              </button>
 
-              <button onClick={() => setOpenAddModal(true)} disabled={!canWorkClient} className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded">
+              <button onClick={() => setOpenAddModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded">
                 ➕ Add Service
               </button>
               
             
               <button
-                className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black text-sm px-4 py-2 rounded"
+                className="bg-[#c29a4b] hover:bg-[#d3aa57] text-black text-sm px-4 py-2 rounded"
                 onClick={() => setShowEditModal(true)}
-                disabled={!canWorkClient}
               >
                 Edit Client Info
               </button>
+                </>
+              )}
              
             </div>  
         </div>
@@ -495,12 +610,11 @@ export default function SingleClientPage() {
               {clientServices.length === 0 ? (
                 <div className="text-gray-400 text-sm">No services added yet.</div>
               ) : (
-                clientServices.map((service, index) => {
-                  const randomColor = bgColors[index % bgColors.length]
+                clientServices.map((service) => {
                   return (
                     <div
                       key={service.id}
-                      className={`p-4 rounded-lg text-white shadow-md ${randomColor}`}
+                      className="p-4 rounded-lg text-white shadow-md bg-[#161719] border border-gray-700"
                     >
                       <h3 className="text-lg font-bold">{service.package_name}</h3>
                       <p>
@@ -524,6 +638,61 @@ export default function SingleClientPage() {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="bg-[#202124] p-4 rounded-lg border border-gray-800">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-[#c29a4b]">Connected People</h3>
+            {canEditMainClient && (
+              <button
+                className="rounded bg-sky-700 px-3 py-1.5 text-sm text-white hover:bg-sky-600"
+                onClick={openAddAssignmentModal}
+              >
+                Add Person
+              </button>
+            )}
+          </div>
+
+          {assignments.length === 0 ? (
+            <p className="text-sm text-gray-400">No connected people yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {assignments.map((assignment) => {
+                const canEditAssignment = user?.role === 'admin' || assignment.user_id === user?.id
+                return (
+                  <div key={assignment.id} className="rounded border border-gray-700 bg-[#161719] p-3 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-white">
+                          {assignment.users?.sudo_name || assignment.users?.name || 'Unknown'}
+                        </div>
+                        <div className="mt-1 text-xs uppercase text-gray-500">
+                          {assignment.assignment_type || 'connected'}
+                        </div>
+                      </div>
+                      <span className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200">
+                        {getAssignmentStatusLabel(assignment.status)}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-gray-300">{assignment.remarks || 'No remarks yet.'}</p>
+                    {canEditAssignment && (
+                      <button
+                        className="mt-3 rounded bg-gray-700 px-3 py-1 text-xs text-white hover:bg-gray-600"
+                        onClick={() => {
+                          setAssignmentUserId(assignment.user_id)
+                          setAssignmentStatus(assignment.status || 'connected')
+                          setAssignmentRemarks(assignment.remarks || '')
+                          setShowAssignmentModal(true)
+                        }}
+                      >
+                        Update Status / Remarks
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div className="bg-[#2a2a2a] p-4 rounded-lg">
@@ -649,6 +818,79 @@ export default function SingleClientPage() {
                   disabled={transferLoading}
                 >
                   {transferLoading ? 'Transferring...' : 'Transfer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignmentModal && client && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-[#1c1c1e] text-white rounded-xl p-6 w-full max-w-lg border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-[#c29a4b]">Connected Person</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm mb-1">Person</label>
+                <select
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 disabled:opacity-60"
+                  value={assignmentUserId}
+                  onChange={(e) => setAssignmentUserId(e.target.value)}
+                  disabled={!canEditMainClient}
+                >
+                  <option value="">Select person</option>
+                  {users.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.sudo_name || item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Status</label>
+                <select
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+                  value={assignmentStatus}
+                  onChange={(e) => setAssignmentStatus(e.target.value)}
+                >
+                  {ASSIGNMENT_STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Remarks</label>
+                <textarea
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 min-h-24"
+                  value={assignmentRemarks}
+                  onChange={(e) => setAssignmentRemarks(e.target.value)}
+                  placeholder="Add remarks for this person"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
+                  onClick={() => {
+                    setShowAssignmentModal(false)
+                    setAssignmentUserId('')
+                    setAssignmentStatus('connected')
+                    setAssignmentRemarks('')
+                  }}
+                  disabled={assignmentLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="bg-sky-700 hover:bg-sky-600 px-4 py-2 rounded"
+                  onClick={handleSaveAssignment}
+                  disabled={assignmentLoading}
+                >
+                  {assignmentLoading ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>
