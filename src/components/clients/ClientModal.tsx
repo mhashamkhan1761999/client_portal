@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import supabase from '../../lib/supabaseClient'
 import { useRouter } from 'next/navigation';
+import { CLIENT_STATUSES } from '@/lib/clientStatus'
 
 export default function ClientModal({
   open,
@@ -57,9 +58,7 @@ export default function ClientModal({
 
   const phone = form.phone_numbers[0]?.replace(/\D/g, '')
 
-  if (!phone) {
-    newErrors.phone_numbers = 'Phone number is required'
-  } else if (phone.length !== 10) {
+  if (phone && phone.length !== 10) {
     newErrors.phone_numbers = 'Phone number must be 10 digits long'
   }
 
@@ -138,16 +137,27 @@ export default function ClientModal({
     if (!validateForm()) return
 
     const phoneToCheck = form.phone_numbers[0]?.trim()
+    const normalizedForm = {
+      ...form,
+      phone_numbers: form.phone_numbers.map((phone) => phone.trim()).filter(Boolean),
+      email_addresses: form.email_addresses.map((email) => email.trim()).filter(Boolean),
+      work_email: form.work_email.trim(),
+      profile_url: form.profile_url.trim(),
+      website_url: form.website_url.trim(),
+      secondary_phones: form.secondary_phones.map((phone) => phone.trim()).filter(Boolean),
+    }
 
-    // Fetch clients with matching name or email
-    const { data: possibleDuplicates, error } = await supabase
+    const duplicateFilters = [`client_name.eq.${normalizedForm.client_name}`]
+    if (normalizedForm.work_email) duplicateFilters.push(`work_email.eq.${normalizedForm.work_email}`)
+
+    const { data: possibleDuplicates } = await supabase
       .from('clients')
-      .select('id, phone_numbers')
-      .or(`work_email.eq.${form.work_email},client_name.eq.${form.client_name}`)
+      .select('id, client_name, phone_numbers')
+      .or(duplicateFilters.join(','))
 
     const duplicate = possibleDuplicates?.find((c: any) => {
       if (clientData && c.id === clientData.id) return false
-      return c.phone_numbers?.includes(phoneToCheck)
+      return c.client_name === normalizedForm.client_name || (phoneToCheck && c.phone_numbers?.includes(phoneToCheck))
     })
 
     if (duplicate) {
@@ -157,22 +167,42 @@ export default function ClientModal({
 
     let clientId: string | null = null
 
-    form.secondary_phones = form.secondary_phones.filter(p => p.trim() !== '')
-
-
     if (clientData) {
       const { data: updated } = await supabase
         .from('clients')
-        .update(form)
+        .update(normalizedForm)
         .eq('id', clientData.id)
         .select('id')
         .single()
 
       clientId = updated?.id ?? null
 
+      const assignedToChanged = clientData.assigned_to !== normalizedForm.assigned_to
+      const statusChanged = clientData.status !== normalizedForm.status
+
+      if (clientId && (assignedToChanged || statusChanged)) {
+        const { data: authData } = await supabase.auth.getUser()
+        const changedBy =
+          currentUser && typeof currentUser === 'object' && currentUser.id
+            ? currentUser.id
+            : authData.user?.id
+
+        await supabase.from('status_logs').insert({
+          client_id: clientId,
+          previous_status: clientData.status || null,
+          new_status: normalizedForm.status || null,
+          changed_by: changedBy || null,
+          affected_user: normalizedForm.assigned_to || null,
+          action_type: assignedToChanged ? 'client_transferred' : 'status_changed',
+          note: assignedToChanged
+            ? `Transferred from ${clientData.assigned_to || 'unassigned'} to ${normalizedForm.assigned_to || 'unassigned'}`
+            : `Status changed from ${clientData.status || 'none'} to ${normalizedForm.status || 'none'}`,
+        })
+      }
+
       toast.success('Client updated successfully')
     } else {
-      const { data: inserted, error } = await supabase.from('clients').insert([form]).select('id').single()
+      const { data: inserted, error } = await supabase.from('clients').insert([normalizedForm]).select('id').single()
 
       if (error || !inserted) {
         toast.error('Failed to insert client')
@@ -320,7 +350,9 @@ export default function ClientModal({
                 onChange={(e) => handleChange('connecting_platform', e.target.value)}
                 className="w-full p-2 mb-2 rounded bg-[#111] border border-gray-600"
               >
-              <option value="">Select Platform</option>
+              <option value="">Select Connection</option>
+              <option value="email">On Email</option>
+              <option value="facebook">On Facebook</option>
               {number.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.platform} - {item.phone_number}
@@ -379,12 +411,11 @@ export default function ClientModal({
               onChange={(e) => handleChange('status', e.target.value)}
             >
               <option value="new">New</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="upsell">Upsell</option>
-              <option value="converted">Converted</option>
-              <option value="followup">Follow Up</option>
-              <option value="delivered">Delivered</option>
+              {CLIENT_STATUSES.filter((status) => status.value !== 'new').map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
             </select>
           </div>
 

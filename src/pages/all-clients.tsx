@@ -6,6 +6,7 @@ import Layout from '../components/layout/Layout'
 import ClientModal from '../components/clients/ClientModal'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { CLIENT_STATUSES, getClientStatusLabel } from '@/lib/clientStatus'
 
 
 
@@ -173,7 +174,7 @@ const getStatusBadge = (status: string) => {
   }
 
   const { label, icon, style } = statusConfig[status] || {
-    label: status,
+    label: getClientStatusLabel(status),
     icon: <span className="mr-1">❓</span>,
     style: 'bg-gray-600 text-gray-100',
   }
@@ -267,7 +268,7 @@ return (
       {/* Filters and Sort */}
       <div className="flex flex-wrap justify-between mb-4">
         <div className="flex flex-wrap gap-2">
-          {['all', 'new', 'in_progress', 'completed', 'upsell', 'followup'].map((status) => (
+          {['all', ...CLIENT_STATUSES.map((status) => status.value)].map((status) => (
             <button
               key={status}
               className={`px-4 py-1.5 text-sm font-medium rounded-full transition-all duration-200 border
@@ -277,7 +278,7 @@ return (
               }
               onClick={() => setStatusFilter(status)}
             >
-              {status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              {status === 'all' ? 'All' : getClientStatusLabel(status)}
             </button>
           ))}
         </div>

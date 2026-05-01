@@ -6,6 +6,7 @@ import { createPagesBrowserClient } from '@supabase/auth-helpers-nextjs';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/context/AuthContext';
 import { NotificationProvider } from '@/context/NotificationContext';
+import FollowUpNotifier from '@/components/FollowUpNotifier';
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   const [supabaseClient] = useState(() => createPagesBrowserClient());
@@ -19,6 +20,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         <NotificationProvider>
         <AuthProvider>
           <Toaster position="top-right" richColors closeButton />
+          <FollowUpNotifier />
           <Component {...pageProps} />
         </AuthProvider>
         </NotificationProvider>

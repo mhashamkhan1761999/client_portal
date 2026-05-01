@@ -432,6 +432,8 @@ export default function AdminUserManagement() {
                     className="w-full p-2 rounded bg-[#2a2a2a] text-white border border-gray-600"
                   >
                     <option value="">-- Select Platform --</option>
+                    <option value="google-voice">Google Voice</option>
+                    <option value="krisp">Krisp</option>
                     <option value="Zoom">Zoom</option>
                     <option value="3CX">3CX</option>
                     <option value="Dialpad">Dialpad</option>

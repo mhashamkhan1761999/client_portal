@@ -1,32 +1,21 @@
-import { GetServerSidePropsContext } from 'next';
-import { createPagesServerClient } from '@supabase/auth-helpers-nextjs';
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+import supabase from '@/lib/supabaseClient'
 
 export default function Home() {
-  return null; // nothing to render because we redirect
-}
+  const router = useRouter()
 
-export async function getServerSideProps(ctx: GetServerSidePropsContext) {
-  const supabase = createPagesServerClient(ctx);
+  useEffect(() => {
+    const redirectFromSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+      router.replace(session ? '/dashboard' : '/login')
+    }
 
-  if (!session) {
-    // Not logged in → go to login
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false,
-      },
-    };
-  }
+    redirectFromSession()
+  }, [router])
 
-  // Logged in → go to dashboard
-  return {
-    redirect: {
-      destination: '/dashboard',
-      permanent: false,
-    },
-  };
+  return <div className="text-white">Loading...</div>
 }

@@ -40,10 +40,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .from('users')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching user:', error);
+      setUser(null);
+    } else if (!dbUser) {
+      console.error('No app profile found for authenticated user:', id);
       setUser(null);
     } else {
       setUser(dbUser as AuthUser);

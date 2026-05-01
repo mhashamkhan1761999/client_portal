@@ -11,6 +11,7 @@ import ServiceModal from '@/components/shared/DetailModal' // Adjust the import 
 import AddServiceModal from '../../components/clients/AddServiceModal'
 import FollowUpForm from '@/components/FollowUpForm'
 import dayjs from 'dayjs'
+import { getClientStatusLabel } from '@/lib/clientStatus'
 
 
 
@@ -28,6 +29,7 @@ export default function SingleClientPage() {
   const [services, setServices] = useState<any[]>([])
   const [number, setNumber] = useState<any[]>([])
   const [followUps, setFollowUps] = useState<ClientFollowUp[]>([])  
+  const [transferLogs, setTransferLogs] = useState<TransferLog[]>([])
 
   const bgColors = [
     'bg-red-600',
@@ -45,6 +47,19 @@ export default function SingleClientPage() {
     reminder_date: string
     note?: string
     is_completed: boolean
+  }
+
+  type TransferLog = {
+    id: string
+    created_at: string
+    previous_status?: string | null
+    new_status?: string | null
+    changed_by?: string | null
+    affected_user?: string | null
+    action_type?: string | null
+    note?: string | null
+    changed_by_name?: string
+    affected_user_name?: string
   }
 
   const getPlatformLabel = (id: string | undefined) => {
@@ -145,7 +160,51 @@ export default function SingleClientPage() {
 
 
     setClientServices(serviceDetails)
+    await fetchTransferLogs(clientId)
     setLoading(false)
+  }
+
+  const fetchTransferLogs = async (id: string) => {
+    const { data: logs, error } = await supabase
+      .from('status_logs')
+      .select('id, created_at, previous_status, new_status, changed_by, affected_user, action_type, note')
+      .eq('client_id', id)
+      .in('action_type', ['client_transferred', 'status_changed', 'service_assigned'])
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching transfer history:', error.message)
+      setTransferLogs([])
+      return
+    }
+
+    const userIds = Array.from(
+      new Set(
+        (logs || [])
+          .flatMap((log: TransferLog) => [log.changed_by, log.affected_user])
+          .filter(Boolean)
+      )
+    ) as string[]
+
+    let userMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, name, sudo_name')
+        .in('id', userIds)
+
+      userMap = Object.fromEntries(
+        (usersData || []).map((user: any) => [user.id, user.sudo_name || user.name || user.id])
+      )
+    }
+
+    setTransferLogs(
+      (logs || []).map((log: TransferLog) => ({
+        ...log,
+        changed_by_name: log.changed_by ? userMap[log.changed_by] || log.changed_by : '-',
+        affected_user_name: log.affected_user ? userMap[log.affected_user] || log.affected_user : '-',
+      }))
+    )
   }
 
   const fetchFollowUps = async () => {
@@ -197,7 +256,7 @@ export default function SingleClientPage() {
             <h1 className="text-3xl font-bold">{client.client_name}</h1>
             <div className="mt-2 flex gap-2 flex-wrap">
               <span className="bg-blue-700 text-white px-3 py-1 text-xs rounded-full capitalize">
-                {client.status || 'new'}
+                {getClientStatusLabel(client.status)}
               </span>
               {client.platform && (
                 <span className="bg-gray-700 px-3 py-1 text-xs rounded-full">
@@ -357,6 +416,35 @@ export default function SingleClientPage() {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="bg-[#2a2a2a] p-4 rounded-lg">
+          <h3 className="text-lg font-semibold mb-3 text-[#c29a4b]">Transfer / Status History</h3>
+          {transferLogs.length === 0 ? (
+            <p className="text-sm text-gray-400">No transfer or status history yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {transferLogs.map((log) => (
+                <div key={log.id} className="border border-gray-700 rounded p-3 text-sm">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium capitalize">
+                      {(log.action_type || 'status_changed').replace('_', ' ')}
+                    </span>
+                    <span className="text-gray-400">{new Date(log.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="mt-2 text-gray-300">
+                    <span>{getClientStatusLabel(log.previous_status || '')}</span>
+                    <span className="mx-2">→</span>
+                    <span>{getClientStatusLabel(log.new_status || '')}</span>
+                  </div>
+                  <div className="mt-1 text-gray-400">
+                    Changed by {log.changed_by_name || '-'}; transferred/assigned to {log.affected_user_name || '-'}
+                  </div>
+                  {log.note && <div className="mt-1 text-gray-300">{log.note}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       <div className="flex gap-4 mt-6">

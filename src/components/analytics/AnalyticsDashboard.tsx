@@ -12,6 +12,7 @@ type UserStat = {
   totalClients: number;
   converted: number;
   connected: number;
+  drop: number;
   inProgress: number;
   notResponding: number;
   totalSales: number;
@@ -81,7 +82,8 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
 
       // Status counts
       const converted = clients?.filter(c => c.status === "converted").length || 0;
-      const connected = clients?.filter(c => c.status === "followup").length || 0;
+      const connected = clients?.filter(c => c.status === "connected").length || 0;
+      const drop = clients?.filter(c => c.status === "drop").length || 0;
       const inProgress = clients?.filter(c => c.status === "in_progress").length || 0;
       const notResponding = clients?.filter(c => c.status === "new").length || 0;
 
@@ -119,6 +121,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
         totalClients: totalClientsForUser,
         converted,
         connected,
+        drop,
         inProgress,
         notResponding,
         totalSales,

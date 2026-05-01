@@ -38,6 +38,7 @@ const FollowUpNotifier: React.FC = () => {
           action_reason,
           is_completed
         `)
+        .eq("user_id", user.id)
         .eq("is_completed", false)
         .lte("reminder_date", now);
 
@@ -46,6 +47,8 @@ const FollowUpNotifier: React.FC = () => {
       const unacknowledged: FollowUp[] = [];
 
       for (let fu of data || []) {
+        const clientRelation = fu.clients as { client_name?: string } | { client_name?: string }[] | null;
+
         // check acknowledgment for this user
         const { data: ackData } = await supabase
           .from("follow_up_acknowledgments")
@@ -56,7 +59,9 @@ const FollowUpNotifier: React.FC = () => {
         if (!ackData || ackData.length === 0) {
           unacknowledged.push({
             id: fu.id,
-            client_name: fu.clients?.[0]?.client_name || "Unknown",
+            client_name: Array.isArray(clientRelation)
+              ? clientRelation?.[0]?.client_name || "Unknown"
+              : clientRelation?.client_name || "Unknown",
             reminder_date: fu.reminder_date,
             note: fu.note || "",
             action_reason: fu.action_reason

@@ -6,6 +6,7 @@ type UserStat = {
   totalClients: number;
   converted: number;
   connected: number;
+  drop: number;
   inProgress: number;
   notResponding: number;
   totalSales: number;
@@ -28,6 +29,7 @@ export default function UserStatsTable({ stats }: UserStatsTableProps) {
             <StatCard label="Total Clients" count={user.totalClients} color="bg-blue-600" />
             <StatCard label="Converted" count={user.converted} color="bg-green-600" />
             <StatCard label="Connected" count={user.connected} color="bg-yellow-600" />
+            <StatCard label="Drop" count={user.drop} color="bg-red-700" />
             <StatCard label="In Progress" count={user.inProgress} color="bg-orange-600" />
             <StatCard label="Not Responding" count={user.notResponding} color="bg-red-600" />
             <StatCard label="Sales" count={user.totalSales} color="bg-purple-600" />
