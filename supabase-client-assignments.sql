@@ -14,12 +14,28 @@ create table if not exists public.client_assignments (
   updated_at timestamptz not null default now(),
   constraint client_assignments_unique_user_per_client unique (client_id, user_id),
   constraint client_assignments_assignment_type_check check (
-    assignment_type in ('primary', 'connected')
+    assignment_type in ('primary', 'connected', 'nurturer', 'seller', 'closer')
   ),
   constraint client_assignments_status_check check (
-    status in ('connected', 'interested', 'not_interested', 'followup', 'converted', 'drop')
+    status in ('connected', 'interested', 'not_interested', 'not_responding', 'followup', 'converted', 'delivered', 'drop')
   )
 );
+
+alter table public.client_assignments
+  drop constraint if exists client_assignments_assignment_type_check;
+
+alter table public.client_assignments
+  add constraint client_assignments_assignment_type_check check (
+    assignment_type in ('primary', 'connected', 'nurturer', 'seller', 'closer')
+  );
+
+alter table public.client_assignments
+  drop constraint if exists client_assignments_status_check;
+
+alter table public.client_assignments
+  add constraint client_assignments_status_check check (
+    status in ('connected', 'interested', 'not_interested', 'not_responding', 'followup', 'converted', 'delivered', 'drop')
+  );
 
 create index if not exists client_assignments_client_id_idx
   on public.client_assignments(client_id);

@@ -29,6 +29,12 @@ const formatUSPhone = (phone: string) => {
 const statusClass: Record<string, string> = {
   connected: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   converted: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+  delivered: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
+  completed: 'bg-sky-500/10 text-sky-300 border-sky-500/30',
+  interested: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  in_progress: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  not_responding: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+  unresponsive: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
   drop: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
   not_interested: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
   followup: 'bg-amber-500/10 text-amber-300 border-amber-500/30',

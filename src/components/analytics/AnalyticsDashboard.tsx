@@ -48,6 +48,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
   const [totalSalesAllUsers, setTotalSalesAllUsers] = useState(0);
   const [transferStats, setTransferStats] = useState<TransferStat[]>([]);
   const [leadGenStats, setLeadGenStats] = useState<LeadGenStat[]>([]);
+  const [reportView, setReportView] = useState<"team" | "transfers" | "leadgen">("team");
 
   // Filter state (example: "month" | "quarter" | "year")
   const [filter, setFilter] = useState<"month" | "quarter" | "year">("month");
@@ -111,8 +112,8 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
       const converted = clients?.filter(c => c.status === "converted").length || 0;
       const connected = clients?.filter(c => c.status === "connected").length || 0;
       const drop = clients?.filter(c => c.status === "drop").length || 0;
-      const inProgress = clients?.filter(c => c.status === "in_progress").length || 0;
-      const notResponding = clients?.filter(c => c.status === "new").length || 0;
+      const inProgress = clients?.filter(c => c.status === "interested" || c.status === "in_progress").length || 0;
+      const notResponding = clients?.filter(c => c.status === "not_responding" || c.status === "unresponsive").length || 0;
 
       // Sales
       const { data: salesData } = await supabase
@@ -231,9 +232,9 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
   if (loading) return <div>Loading analytics...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-2">
         <button
           className={`px-4 py-2 rounded ${filter === "month" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
           onClick={() => setFilter("month")}
@@ -255,20 +256,40 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
       </div>
 
       {/* Total Stats */}
-      <div className="grid grid-cols-3 gap-4 mt-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatCard label="Total Clients" count={totalClients} color="bg-blue-600" />
         {totalSalesAllUsers >= 0 && (
           <StatCard label="Total Sales (All Users)" count={totalSalesAllUsers} color="bg-purple-600" />
         )}
       </div>
 
-      {/* User Stats */}
-      <UserStatsTable stats={userStats} />
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: "team", label: "Team Stats" },
+          { id: "transfers", label: "Transfers" },
+          { id: "leadgen", label: "Lead Gen" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            className={`rounded border px-3 py-1.5 text-sm ${
+              reportView === tab.id
+                ? "border-sky-500 bg-sky-500/15 text-sky-200"
+                : "border-slate-700 bg-[#101113] text-slate-300 hover:border-slate-500"
+            }`}
+            onClick={() => setReportView(tab.id as typeof reportView)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
+      {reportView === "team" && <UserStatsTable stats={userStats} />}
+
+      {reportView === "transfers" && (
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Transfer Report</h2>
         {transferStats.map((item) => (
-          <div key={item.userId} className="p-4 bg-gray-900 rounded-xl">
+          <div key={item.userId} className="rounded-lg border border-slate-800 bg-gray-900 p-4">
             <h3 className="font-bold mb-3">{item.name}</h3>
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Transfers Sent" count={item.sent} color="bg-purple-600" />
@@ -284,11 +305,13 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
           </div>
         ))}
       </div>
+      )}
 
+      {reportView === "leadgen" && (
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Lead Gen Performance</h2>
         {leadGenStats.map((agent) => (
-          <div key={agent.id} className="p-4 bg-gray-900 rounded-xl">
+          <div key={agent.id} className="rounded-lg border border-slate-800 bg-gray-900 p-4">
             <h3 className="font-bold mb-3">{agent.name}</h3>
             <div className="grid grid-cols-2 gap-3">
               <StatCard label="Connected Leads" count={agent.connected} color="bg-cyan-600" />
@@ -309,6 +332,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

@@ -1,15 +1,16 @@
 export const CLIENT_STATUSES = [
   { value: 'new', label: 'New' },
   { value: 'connected', label: 'Connected' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'followup', label: 'Follow Up' },
+  { value: 'interested', label: 'Interested' },
+  { value: 'not_responding', label: 'Not Responding' },
   { value: 'converted', label: 'Converted' },
-  { value: 'completed', label: 'Completed' },
   { value: 'delivered', label: 'Delivered' },
-  { value: 'upsell', label: 'Upsell' },
   { value: 'drop', label: 'Drop' },
 ] as const
 
 export const getClientStatusLabel = (status?: string) => {
+  if (status === 'unresponsive') return 'Not Responding'
+  if (status === 'in_progress') return 'Interested'
+  if (status === 'completed') return 'Delivered'
   return CLIENT_STATUSES.find((item) => item.value === status)?.label || status || 'New'
 }

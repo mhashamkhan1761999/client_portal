@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import supabase from '@/lib/supabaseClient'
 import ClientModal from '../clients/ClientModal'
+import { getClientStatusLabel } from '@/lib/clientStatus'
+import { useAuth } from '@/context/AuthContext'
 
 
 
@@ -18,6 +20,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
   const [showModal, setShowModal] = useState(false)
   const [editingClient, setEditingClient] = useState<any>(null)
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   
   
 
@@ -40,6 +43,23 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
 
 
   const fetchClients = async () => {
+    if (!user) return
+
+    let visibleClientIds: string[] = []
+
+    if (user.role !== 'admin') {
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('client_assignments')
+        .select('client_id')
+        .eq('user_id', user.id)
+
+      if (assignmentError) {
+        console.error('Error fetching connected clients:', assignmentError)
+      }
+
+      visibleClientIds = Array.from(new Set((assignments || []).map((item: any) => item.client_id).filter(Boolean)))
+    }
+
     let query = supabase
       .from('clients')
       .select(`
@@ -58,6 +78,12 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
       query = query.eq('status', statusFilter)
     }
 
+    if (user.role !== 'admin') {
+      query = visibleClientIds.length > 0
+        ? query.or(`assigned_to.eq.${user.id},id.in.(${visibleClientIds.join(',')})`)
+        : query.eq('assigned_to', user.id)
+    }
+
     const { data, error } = await query
 
     if (error) {
@@ -69,8 +95,9 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
   }
 
   useEffect(() => {
+    if (authLoading || !user) return
     fetchClients()
-  }, [])
+  }, [authLoading, user, statusFilter])
 
   const handleClientSaved = () => {
     fetchClients()
@@ -81,7 +108,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
     <div className="mt-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-[#c29a4b]">Recent Clients</h1>
+        <h1 className="text-2xl font-bold text-[#c29a4b]">Client Table</h1>
         <button
           className="bg-[#c29a4b] text-black px-4 py-2 rounded-lg hover:bg-yellow-600 transition"
           onClick={() => {
@@ -115,7 +142,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
                 <td className="p-3">{client.client_name}</td>
                 <td className="p-3">{client.phone_numbers?.[0] || 'N/A'}</td>
                 <td className="p-3">{client.email_addresses?.[0] || 'N/A'}</td>
-                <td className="p-3 capitalize">{client.status || 'N/A'}</td>
+                <td className="p-3">{getClientStatusLabel(client.status)}</td>
                 <td className="p-3 relative group">
                     {(() => {
                       const pending = client.follow_ups?.find((f: { is_completed: boolean; reminder_date: string }) => !f.is_completed)
@@ -178,7 +205,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
             onClose={() => setShowModal(false)}
             onSaved={handleClientSaved}
             clientData={editingClient}
-            currentUser={undefined}
+            currentUser={user}
           />
         )}
       </div>

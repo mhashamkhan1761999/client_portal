@@ -102,8 +102,12 @@ export default function ClientModal({
   }, [clientData])
 
   const fetchUsers = async () => {
-    const { data } = await supabase.from('users').select('id, sudo_name')
-    setUsers(data || [])
+    const { data } = await supabase
+      .from('users')
+      .select('id, sudo_name, role')
+      .eq('is_active', true)
+
+    setUsers((data || []).filter((user) => user.role !== 'admin'))
   }
 
   const fetchServices = async () => {
@@ -172,6 +176,11 @@ export default function ClientModal({
     let clientId: string | null = null
 
     if (clientData) {
+      if (clientData.assigned_to !== normalizedForm.assigned_to) {
+        toast.error('Use Transfer Lead to change the primary owner.')
+        return
+      }
+
       const { data: updated } = await supabase
         .from('clients')
         .update(normalizedForm)
@@ -181,10 +190,9 @@ export default function ClientModal({
 
       clientId = updated?.id ?? null
 
-      const assignedToChanged = clientData.assigned_to !== normalizedForm.assigned_to
       const statusChanged = clientData.status !== normalizedForm.status
 
-      if (clientId && (assignedToChanged || statusChanged)) {
+      if (clientId && statusChanged) {
         const { data: authData } = await supabase.auth.getUser()
         const changedBy =
           currentUser && typeof currentUser === 'object' && currentUser.id
@@ -197,10 +205,8 @@ export default function ClientModal({
           new_status: normalizedForm.status || null,
           changed_by: changedBy || null,
           affected_user: normalizedForm.assigned_to || null,
-          action_type: assignedToChanged ? 'client_transferred' : 'status_changed',
-          note: assignedToChanged
-            ? `Transferred from ${clientData.assigned_to || 'unassigned'} to ${normalizedForm.assigned_to || 'unassigned'}`
-            : `Status changed from ${clientData.status || 'none'} to ${normalizedForm.status || 'none'}`,
+          action_type: 'status_changed',
+          note: `Status changed from ${clientData.status || 'none'} to ${normalizedForm.status || 'none'}`,
         })
       }
 
@@ -364,7 +370,7 @@ export default function ClientModal({
 
           {/* Own Connecting Dropdown */}
           <div className="mb-4">
-            <label className="block text-sm mb-1">Connected With</label>
+            <label className="block text-sm mb-1">Connection Channel</label>
               <select
                 value={form.connecting_platform}
                 onChange={(e) => handleChange('connecting_platform', e.target.value)}

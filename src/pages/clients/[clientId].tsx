@@ -14,7 +14,7 @@ import dayjs from 'dayjs'
 import { getClientStatusLabel } from '@/lib/clientStatus'
 import { getLeadNatureLabel } from '@/lib/leadNature'
 import { TRANSFER_REASONS, getTransferReasonLabel } from '@/lib/leadTransfer'
-import { ASSIGNMENT_STATUSES, getAssignmentStatusLabel } from '@/lib/clientAssignment'
+import { ASSIGNMENT_STATUSES, ASSIGNMENT_TYPES, getAssignmentStatusLabel, getAssignmentTypeLabel } from '@/lib/clientAssignment'
 import { useAuth } from '@/context/AuthContext'
 
 
@@ -43,10 +43,14 @@ export default function SingleClientPage() {
   const [transferLoading, setTransferLoading] = useState(false)
   const [assignments, setAssignments] = useState<ClientAssignment[]>([])
   const [showAssignmentModal, setShowAssignmentModal] = useState(false)
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null)
   const [assignmentUserId, setAssignmentUserId] = useState('')
+  const [assignmentType, setAssignmentType] = useState('connected')
   const [assignmentStatus, setAssignmentStatus] = useState('connected')
   const [assignmentRemarks, setAssignmentRemarks] = useState('')
   const [assignmentLoading, setAssignmentLoading] = useState(false)
+  const [showFullDetails, setShowFullDetails] = useState(false)
+  const [activeClientPanel, setActiveClientPanel] = useState<'people' | 'history' | 'followups' | 'notes'>('people')
 
   type ClientFollowUp = {
     id: string
@@ -296,9 +300,12 @@ export default function SingleClientPage() {
   const isConnectedUser = Boolean(user && assignments.some((assignment) => assignment.user_id === user.id))
   const canEditMainClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
   const canWorkClient = Boolean(canEditMainClient || isConnectedUser)
+  const nonAdminUsers = users.filter((item) => item.role !== 'admin')
 
   const openAddAssignmentModal = () => {
+    setEditingAssignmentId(null)
     setAssignmentUserId('')
+    setAssignmentType('connected')
     setAssignmentStatus('connected')
     setAssignmentRemarks('')
     setShowAssignmentModal(true)
@@ -307,16 +314,20 @@ export default function SingleClientPage() {
   const handleSaveAssignment = async () => {
     if (!user || !client || !clientId || typeof clientId !== 'string') return
     if (!assignmentUserId) return toast.error('Please select a person.')
+    if (!assignmentType) return toast.error('Please select this person role.')
 
     setAssignmentLoading(true)
 
-    const existing = assignments.find((assignment) => assignment.user_id === assignmentUserId)
+    const existing = editingAssignmentId
+      ? assignments.find((assignment) => assignment.id === editingAssignmentId)
+      : assignments.find((assignment) => assignment.user_id === assignmentUserId)
+    const resolvedAssignmentType = assignmentUserId === client.assigned_to ? 'primary' : assignmentType
     const payload = {
       client_id: clientId,
       user_id: assignmentUserId,
       assigned_by: user.id,
       lead_gen_id: client.lead_gen_id || null,
-      assignment_type: assignmentUserId === client.assigned_to ? 'primary' : 'connected',
+      assignment_type: resolvedAssignmentType,
       status: assignmentStatus,
       remarks: assignmentRemarks.trim() || null,
       lead_nature: client.lead_nature || null,
@@ -332,13 +343,42 @@ export default function SingleClientPage() {
     } else {
       toast.success('Connected person saved.')
       setShowAssignmentModal(false)
+      setEditingAssignmentId(null)
       setAssignmentUserId('')
+      setAssignmentType('connected')
       setAssignmentStatus('connected')
       setAssignmentRemarks('')
       await fetchAssignments(clientId)
     }
 
     setAssignmentLoading(false)
+  }
+
+  const handleDeleteAssignment = async (assignment: ClientAssignment) => {
+    if (!client || !clientId || typeof clientId !== 'string' || !canEditMainClient) return
+
+    const isPrimaryAssignment = assignment.assignment_type === 'primary' || assignment.user_id === client.assigned_to
+    if (isPrimaryAssignment) {
+      toast.error('Primary owner cannot be removed here. Use Transfer Lead first.')
+      return
+    }
+
+    const personName = assignment.users?.sudo_name || assignment.users?.name || 'this person'
+    if (!window.confirm(`Remove ${personName} from connected people?`)) return
+
+    const { error } = await supabase
+      .from('client_assignments')
+      .delete()
+      .eq('id', assignment.id)
+
+    if (error) {
+      console.error(error)
+      toast.error('Failed to remove connected person.')
+      return
+    }
+
+    toast.success('Connected person removed.')
+    await fetchAssignments(clientId)
   }
 
   const handleTransferLead = async () => {
@@ -451,7 +491,7 @@ export default function SingleClientPage() {
     <Layout>
       <div className="bg-[#1c1c1e] text-white p-6 rounded-xl mt-6 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold">{client.client_name}</h1>
             <div className="mt-2 flex gap-2 flex-wrap">
@@ -465,7 +505,7 @@ export default function SingleClientPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
               <Link href="/all-clients">
                 <button className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-4 py-2 rounded">
                   ← Back to Clients
@@ -510,11 +550,18 @@ export default function SingleClientPage() {
             </div>  
         </div>
 
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <SummaryItem label="Owner" value={client?.sudo_name || '-'} />
+          <SummaryItem label="Lead Gen" value={client.lead_gen_name || '-'} />
+          <SummaryItem label="Connected People" value={assignments.length} />
+          <SummaryItem label="Services" value={clientServices.length} />
+        </div>
+
         {/* Info Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Client Info Section (2 columns) */}
           <div className="md:col-span-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-[#2a2a2a] p-4 rounded-lg">
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-[#2a2a2a] p-4 rounded-lg ${showFullDetails ? '' : 'max-h-48 overflow-hidden'}`}>
               <InfoItem label="Phone" value={client.phone_numbers?.[0]} />
               <InfoItem label="Email Address" value={client.email_addresses} />
               <InfoItem label="Work Email" value={client.work_email} />
@@ -600,6 +647,12 @@ export default function SingleClientPage() {
               <InfoItem label="Lead Nature" value={getLeadNatureLabel(client.lead_nature)} />
               <InfoItem label="Created At" value={new Date(client.created_at).toLocaleString()} />
             </div>
+            <button
+              className="mt-2 rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-500"
+              onClick={() => setShowFullDetails((value) => !value)}
+            >
+              {showFullDetails ? 'Show less' : 'Show all details'}
+            </button>
           </div>
 
          
@@ -640,6 +693,28 @@ export default function SingleClientPage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'people', label: `People (${assignments.length})` },
+            { id: 'history', label: `History (${transferLogs.length})` },
+            { id: 'followups', label: 'Follow-ups' },
+            { id: 'notes', label: 'Notes / Assets' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              className={`rounded border px-4 py-2 text-sm transition ${
+                activeClientPanel === tab.id
+                  ? 'border-sky-500 bg-sky-500/15 text-sky-200'
+                  : 'border-slate-700 bg-[#101113] text-slate-300 hover:border-slate-500'
+              }`}
+              onClick={() => setActiveClientPanel(tab.id as typeof activeClientPanel)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeClientPanel === 'people' && (
         <div className="bg-[#202124] p-4 rounded-lg border border-gray-800">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-[#c29a4b]">Connected People</h3>
@@ -658,7 +733,8 @@ export default function SingleClientPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {assignments.map((assignment) => {
-                const canEditAssignment = user?.role === 'admin' || assignment.user_id === user?.id
+                const isPrimaryAssignment = assignment.assignment_type === 'primary' || assignment.user_id === client.assigned_to
+                const canEditAssignment = canEditMainClient || assignment.user_id === user?.id
                 return (
                   <div key={assignment.id} className="rounded border border-gray-700 bg-[#161719] p-3 text-sm">
                     <div className="flex items-start justify-between gap-2">
@@ -667,7 +743,7 @@ export default function SingleClientPage() {
                           {assignment.users?.sudo_name || assignment.users?.name || 'Unknown'}
                         </div>
                         <div className="mt-1 text-xs uppercase text-gray-500">
-                          {assignment.assignment_type || 'connected'}
+                          {getAssignmentTypeLabel(assignment.assignment_type)}
                         </div>
                       </div>
                       <span className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-200">
@@ -676,17 +752,29 @@ export default function SingleClientPage() {
                     </div>
                     <p className="mt-3 text-gray-300">{assignment.remarks || 'No remarks yet.'}</p>
                     {canEditAssignment && (
-                      <button
-                        className="mt-3 rounded bg-gray-700 px-3 py-1 text-xs text-white hover:bg-gray-600"
-                        onClick={() => {
-                          setAssignmentUserId(assignment.user_id)
-                          setAssignmentStatus(assignment.status || 'connected')
-                          setAssignmentRemarks(assignment.remarks || '')
-                          setShowAssignmentModal(true)
-                        }}
-                      >
-                        Update Status / Remarks
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          className="rounded bg-gray-700 px-3 py-1 text-xs text-white hover:bg-gray-600"
+                          onClick={() => {
+                            setEditingAssignmentId(assignment.id)
+                            setAssignmentUserId(assignment.user_id)
+                            setAssignmentType(assignment.assignment_type && assignment.assignment_type !== 'primary' ? assignment.assignment_type : 'connected')
+                            setAssignmentStatus(assignment.status || 'connected')
+                            setAssignmentRemarks(assignment.remarks || '')
+                            setShowAssignmentModal(true)
+                          }}
+                        >
+                          Update
+                        </button>
+                        {canEditMainClient && !isPrimaryAssignment && (
+                          <button
+                            className="rounded bg-rose-900/70 px-3 py-1 text-xs text-rose-100 hover:bg-rose-800"
+                            onClick={() => handleDeleteAssignment(assignment)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )
@@ -694,7 +782,9 @@ export default function SingleClientPage() {
             </div>
           )}
         </div>
+        )}
 
+        {activeClientPanel === 'history' && (
         <div className="bg-[#2a2a2a] p-4 rounded-lg">
           <h3 className="text-lg font-semibold mb-3 text-[#c29a4b]">Transfer / Status History</h3>
           {transferLogs.length === 0 ? (
@@ -727,20 +817,28 @@ export default function SingleClientPage() {
           )}
         </div>
 
-      <div className="flex gap-4 mt-6">
+        )}
+
+      {activeClientPanel === 'followups' && (
+      <div className="mt-6">
         {/* Follow-up Reminders */}
-        <div className="w-1/2 bg-white dark:bg-gray-800 p-4 rounded shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
           <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
           <div className="mt-4">
             <FollowUpForm clientId={clientId} onSaved={fetchFollowUps} />
           </div>
         </div>
+      </div>
+      )}
 
+      {activeClientPanel === 'notes' && (
+      <div className="mt-6">
         {/* Notes / Assets Section */}
-        <div className="w-1/2 bg-white dark:bg-gray-800 p-4 rounded shadow">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
           <ClientNotes clientId={client.id} currentUser="system_admin" />
         </div>
       </div>
+      )}
 
 
 
@@ -771,7 +869,7 @@ export default function SingleClientPage() {
                   onChange={(e) => setTransferTo(e.target.value)}
                 >
                   <option value="">Select seller</option>
-                  {users
+                  {nonAdminUsers
                     .filter((item) => item.id !== client.assigned_to)
                     .map((item) => (
                       <option key={item.id} value={item.id}>
@@ -836,15 +934,34 @@ export default function SingleClientPage() {
                   className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2 disabled:opacity-60"
                   value={assignmentUserId}
                   onChange={(e) => setAssignmentUserId(e.target.value)}
-                  disabled={!canEditMainClient}
+                  disabled={!canEditMainClient || Boolean(editingAssignmentId)}
                 >
                   <option value="">Select person</option>
-                  {users.map((item) => (
+                  {nonAdminUsers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.sudo_name || item.name}
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Role</label>
+                <select
+                  className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
+                  value={assignmentType}
+                  onChange={(e) => setAssignmentType(e.target.value)}
+                  disabled={assignmentUserId === client.assigned_to}
+                >
+                  {ASSIGNMENT_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                {assignmentUserId === client.assigned_to && (
+                  <p className="mt-1 text-xs text-gray-400">The primary owner is tracked separately from nurturer/seller roles.</p>
+                )}
               </div>
 
               <div>
@@ -877,7 +994,9 @@ export default function SingleClientPage() {
                   className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
                   onClick={() => {
                     setShowAssignmentModal(false)
+                    setEditingAssignmentId(null)
                     setAssignmentUserId('')
+                    setAssignmentType('connected')
                     setAssignmentStatus('connected')
                     setAssignmentRemarks('')
                   }}
@@ -904,7 +1023,7 @@ export default function SingleClientPage() {
             onClose={() => setShowServiceModal(false)}
           />
 
-        <AddServiceModal
+      <AddServiceModal
         isOpen={openAddModal}
         onClose={() => setOpenAddModal(false)}
         clientId={clientId}
@@ -913,6 +1032,15 @@ export default function SingleClientPage() {
       />
 
     </Layout>
+  )
+}
+
+function SummaryItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-[#161719] p-4">
+      <div className="text-xs uppercase text-slate-500">{label}</div>
+      <div className="mt-2 truncate text-lg font-semibold text-white">{value || '-'}</div>
+    </div>
   )
 }
 
