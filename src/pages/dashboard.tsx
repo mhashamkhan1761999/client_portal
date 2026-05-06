@@ -72,9 +72,6 @@ export default function Dashboard() {
   const statusCounts = CLIENT_STATUSES.map((status) => ({
     ...status,
     count: visibleClients.filter((client) => {
-      if (status.value === 'not_responding') {
-        return client.status === 'not_responding' || client.status === 'unresponsive'
-      }
       if (status.value === 'interested') {
         return client.status === 'interested' || client.status === 'in_progress'
       }

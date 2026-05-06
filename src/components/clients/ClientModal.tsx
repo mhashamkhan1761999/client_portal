@@ -181,12 +181,18 @@ export default function ClientModal({
         return
       }
 
-      const { data: updated } = await supabase
+      const { data: updated, error: updateError } = await supabase
         .from('clients')
         .update(normalizedForm)
         .eq('id', clientData.id)
         .select('id')
         .single()
+
+      if (updateError || !updated) {
+        console.error('Failed to update client:', updateError)
+        toast.error(updateError?.message || 'Failed to update client')
+        return
+      }
 
       clientId = updated?.id ?? null
 
@@ -199,7 +205,7 @@ export default function ClientModal({
             ? currentUser.id
             : authData.user?.id
 
-        await supabase.from('status_logs').insert({
+        const { error: logError } = await supabase.from('status_logs').insert({
           client_id: clientId,
           previous_status: clientData.status || null,
           new_status: normalizedForm.status || null,
@@ -208,6 +214,11 @@ export default function ClientModal({
           action_type: 'status_changed',
           note: `Status changed from ${clientData.status || 'none'} to ${normalizedForm.status || 'none'}`,
         })
+
+        if (logError) {
+          console.error('Failed to insert status log:', logError)
+          toast.error('Client updated, but status history failed to save.')
+        }
       }
 
       toast.success('Client updated successfully')
