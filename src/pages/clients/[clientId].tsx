@@ -822,7 +822,7 @@ export default function SingleClientPage() {
       {activeClientPanel === 'followups' && (
       <div className="mt-6">
         {/* Follow-up Reminders */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
+        <div className="bg-gray-800 p-4 rounded shadow">
           <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
           <div className="mt-4">
             <FollowUpForm clientId={clientId} onSaved={fetchFollowUps} />
@@ -834,7 +834,7 @@ export default function SingleClientPage() {
       {activeClientPanel === 'notes' && (
       <div className="mt-6">
         {/* Notes / Assets Section */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded shadow">
+        <div className="bg-gray-800 p-4 rounded shadow">
           <ClientNotes clientId={client.id} currentUser="system_admin" />
         </div>
       </div>

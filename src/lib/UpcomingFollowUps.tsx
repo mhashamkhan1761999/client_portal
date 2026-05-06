@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import dayjs from "dayjs";
 import supabase from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import {
+  DEFAULT_FOLLOW_UP_TIME_ZONE,
+  followUpInputToUtc,
+  formatFollowUpTime,
+  nowFollowUpInput,
+} from "@/lib/followUpTime";
 
 type FollowUp = {
   id: string;
@@ -100,7 +106,7 @@ export default function UpcomingFollowUps() {
         if (!newDate) return;
         const { error } = await supabase
           .from("follow_ups")
-          .update({ reminder_date: newDate, action_reason: reason })
+          .update({ reminder_date: followUpInputToUtc(newDate, DEFAULT_FOLLOW_UP_TIME_ZONE), action_reason: reason })
           .eq("id", selectedFollowUp.id);
         if (!error) {
           toast.success("Follow-up rescheduled 📅");
@@ -180,7 +186,7 @@ export default function UpcomingFollowUps() {
                 <div>
                   <div className="text-xs text-gray-400 uppercase">Reminder Date</div>
                   <div className="text-white text-sm">
-                    {dayjs(item.reminder_date).format("MMM D, YYYY [at] h:mm A")}
+                    {formatFollowUpTime(item.reminder_date)}
                   </div>
                 </div>
               </div>
@@ -252,7 +258,7 @@ export default function UpcomingFollowUps() {
                 type="datetime-local"
                 className="border w-full p-2 rounded mb-4"
                 value={newDate}
-                min={new Date().toISOString().slice(0, 16)}
+                min={nowFollowUpInput()}
                 onChange={(e) => setNewDate(e.target.value)}
               />
             )}

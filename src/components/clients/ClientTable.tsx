@@ -6,6 +6,7 @@ import supabase from '@/lib/supabaseClient'
 import ClientModal from '../clients/ClientModal'
 import { getClientStatusLabel } from '@/lib/clientStatus'
 import { useAuth } from '@/context/AuthContext'
+import { formatFollowUpTime } from '@/lib/followUpTime'
 
 
 
@@ -147,7 +148,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
                     {(() => {
                       const pending = client.follow_ups?.find((f: { is_completed: boolean; reminder_date: string }) => !f.is_completed)
                       if (!pending) return "No Pending Follow-Up"
-                      return `Pending (${new Date(pending.reminder_date).toLocaleString()})`
+                      return `Pending (${formatFollowUpTime(pending.reminder_date)})`
                     })()}
 
                     {/* Tooltip appears below the cell */}
@@ -158,7 +159,7 @@ export default function ClientTable({ statusFilter }: ClientTableProps) {
                           .map((f: FollowUp) => (
                             <div key={f.id} className="mb-2 last:mb-0">
                               <p><strong>Note:</strong> {f.note || 'No note'}</p>
-                              <p><strong>Reminder:</strong> {new Date(f.reminder_date).toLocaleString()}</p>
+                              <p><strong>Reminder:</strong> {formatFollowUpTime(f.reminder_date)}</p>
                             </div>
                           ))}
                       </div>

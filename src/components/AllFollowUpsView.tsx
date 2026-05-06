@@ -5,6 +5,13 @@ import supabase from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { format } from 'date-fns';
 import { useNotification } from '@/context/NotificationContext';
+import {
+  DEFAULT_FOLLOW_UP_TIME_ZONE,
+  followUpInputToUtc,
+  formatFollowUpTime,
+  isFutureFollowUpInput,
+  nowFollowUpInput,
+} from '@/lib/followUpTime';
 
 interface FollowUp {
   id: string;
@@ -143,9 +150,8 @@ const AllFollowUps: React.FC = () => {
     if (actionType === 'done') updateObj.is_completed = true;
     if (actionType === 'reschedule') {
       if (!newDate) return notify('Please select a new date!', { duration: 5000 });
-      const minFuture = new Date(Date.now() + 60 * 1000);
-      if (new Date(newDate) < minFuture) return notify('Pick a future time.', { duration: 5000 });
-      updateObj.reminder_date = newDate;
+      if (!isFutureFollowUpInput(newDate, DEFAULT_FOLLOW_UP_TIME_ZONE)) return notify('Pick a future time.', { duration: 5000 });
+      updateObj.reminder_date = followUpInputToUtc(newDate, DEFAULT_FOLLOW_UP_TIME_ZONE);
       updateObj.is_completed = false;
     }
 
@@ -159,7 +165,7 @@ const AllFollowUps: React.FC = () => {
     notify(
       actionType === 'done'
         ? 'Follow-up completed ✅'
-        : `Follow-up rescheduled to ${new Date(updateObj.reminder_date).toLocaleString()} 📅`,
+        : `Follow-up rescheduled to ${formatFollowUpTime(updateObj.reminder_date)}`,
       { duration: 5000 }
     );
     setShowReasonModal(false);
@@ -306,18 +312,13 @@ const AllFollowUps: React.FC = () => {
             {filteredFollowUps.map((fu) => {
               const getLocalTime = (utc?: string) => {
                 if (!utc) return '';
-                return new Date(utc).toLocaleString('en-US', {
-                  timeZone: 'Asia/Karachi',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true,
-                });
+                return formatFollowUpTime(utc, 'h:mm A');
               };
               const timeLeft = getRemainingTime(fu.follow_up_at);
               return (
                 <tr key={fu.id} className="hover:bg-[#2a2a2a]">
                   <td className="border-b p-3 font-medium">{fu.client_name}</td>
-                  <td className="border-b p-3">{fu.follow_up_at ? format(new Date(fu.follow_up_at), 'yyyy-MM-dd') : ''}</td>
+                  <td className="border-b p-3">{fu.follow_up_at ? formatFollowUpTime(fu.follow_up_at, 'YYYY-MM-DD') : ''}</td>
                   <td>{getLocalTime(fu.follow_up_at)}</td>
                   <td className="border-b p-3">{fu.status === 'Completed' ? '' : timeLeft}</td>
                   <td className="border-b p-3">
@@ -371,7 +372,7 @@ const AllFollowUps: React.FC = () => {
                 type="datetime-local"
                 className="border w-full p-2 rounded mb-4"
                 value={newDate}
-                min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
+                min={nowFollowUpInput()}
                 onChange={(e) => setNewDate(e.target.value)}
               />
             )}

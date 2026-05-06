@@ -45,7 +45,7 @@ export default function FollowUpCalendar() {
   }))
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-4 rounded shadow">
+    <div className="bg-gray-900 p-4 rounded shadow">
       <h2 className="text-xl font-bold mb-4">📅 Upcoming Follow-Ups</h2>
       <FullCalendar
         plugins={[dayGridPlugin]}

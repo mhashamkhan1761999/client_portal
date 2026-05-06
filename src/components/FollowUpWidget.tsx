@@ -53,7 +53,7 @@ export default function FollowUpWidget() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-4 rounded shadow">
+    <div className="bg-gray-900 p-4 rounded shadow">
       <h2 className="text-lg font-bold mb-2">📌 Today's & Overdue Follow-ups</h2>
       {followUps.length === 0 ? (
         <p className="text-sm text-gray-400">No follow-ups due.</p>

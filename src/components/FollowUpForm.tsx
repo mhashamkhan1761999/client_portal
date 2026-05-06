@@ -5,11 +5,15 @@ import supabase from '@/lib/supabaseClient'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-
-dayjs.extend(utc)
-dayjs.extend(timezone)
+import {
+  DEFAULT_FOLLOW_UP_TIME_ZONE,
+  FOLLOW_UP_TIME_ZONES,
+  followUpInputToUtc,
+  formatFollowUpTime,
+  getFollowUpTimeZoneLabel,
+  nowFollowUpInput,
+  utcToFollowUpInput,
+} from '@/lib/followUpTime'
 
 type FollowUpReminder = {
   id?: string
@@ -32,20 +36,19 @@ export default function FollowUpForm({
   onSaved,
   onClose,
 }: FollowUpFormProps) {
-  const [reminderDate, setReminderDate] = useState<string>('')
-  const [note, setNote] = useState<string>('')
+  const [reminderDate, setReminderDate] = useState('')
+  const [reminderTimeZone, setReminderTimeZone] = useState(DEFAULT_FOLLOW_UP_TIME_ZONE)
+  const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [upcomingReminders, setUpcomingReminders] = useState<FollowUpReminder[]>([])
   const router = useRouter()
 
   useEffect(() => {
     if (existingReminder?.reminder_date) {
-      // Parse UTC from DB, convert to PKT for input
-      const local = dayjs.utc(existingReminder.reminder_date).tz('Asia/Karachi').format('YYYY-MM-DDTHH:mm')
-      setReminderDate(local)
+      setReminderDate(utcToFollowUpInput(existingReminder.reminder_date, reminderTimeZone))
       setNote(existingReminder.note || '')
     }
-  }, [existingReminder])
+  }, [existingReminder, reminderTimeZone])
 
   useEffect(() => {
     fetchUpcomingReminders()
@@ -67,18 +70,13 @@ export default function FollowUpForm({
       return
     }
 
-    // Filter only upcoming (future) reminders
-    const upcoming = (data || []).filter((r: any) =>
-      dayjs(r.reminder_date).isAfter(dayjs())
-    )
-
-    // Map added_by name
+    const upcoming = (data || []).filter((r: any) => dayjs(r.reminder_date).isAfter(dayjs()))
     const mapped = upcoming.map((r: any) => ({
       ...r,
       added_by: r.users?.name || 'Unknown',
     }))
 
-    setUpcomingReminders(mapped.slice(0, 2)) // only top 2
+    setUpcomingReminders(mapped.slice(0, 2))
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -98,8 +96,7 @@ export default function FollowUpForm({
       return
     }
 
-    // Convert PKT → UTC
-    const utcTime = dayjs.tz(reminderDate, 'Asia/Karachi').utc().format()
+    const utcTime = followUpInputToUtc(reminderDate, reminderTimeZone)
 
     const payload = {
       client_id: clientId,
@@ -109,15 +106,9 @@ export default function FollowUpForm({
       is_completed: false,
     }
 
-    let result
-    if (existingReminder?.id) {
-      result = await supabase
-        .from('follow_ups')
-        .update(payload)
-        .eq('id', existingReminder.id)
-    } else {
-      result = await supabase.from('follow_ups').insert(payload)
-    }
+    const result = existingReminder?.id
+      ? await supabase.from('follow_ups').update(payload).eq('id', existingReminder.id)
+      : await supabase.from('follow_ups').insert(payload)
 
     setLoading(false)
 
@@ -127,7 +118,9 @@ export default function FollowUpForm({
       return
     }
 
-    toast.success(`Reminder saved for ${dayjs(reminderDate).format('MMM D, YYYY h:mm A')}`)
+    toast.success(
+      `Reminder saved for ${dayjs(reminderDate).format('MMM D, YYYY h:mm A')} ${getFollowUpTimeZoneLabel(reminderTimeZone)}`
+    )
 
     setReminderDate('')
     setNote('')
@@ -137,8 +130,7 @@ export default function FollowUpForm({
   }
 
   return (
-    <div className="space-y-4 p-4 bg-white dark:bg-gray-900 rounded shadow">
-      {/* Top 2 upcoming reminders */}
+    <div className="space-y-4 p-4 bg-gray-900 rounded shadow">
       <div className="mt-4 p-3 border rounded">
         <h3 className="font-bold mb-2">Upcoming Reminders</h3>
         {upcomingReminders.length === 0 ? (
@@ -147,17 +139,16 @@ export default function FollowUpForm({
           <ul>
             {upcomingReminders.map((reminder) => (
               <li key={reminder.id} className="text-sm py-1">
-                📅 {dayjs.utc(reminder.reminder_date).tz('Asia/Karachi').format('MMM D, YYYY h:mm A')}
-                {' — '}
+                Reminder: {formatFollowUpTime(reminder.reminder_date, 'MMM D, YYYY h:mm A', reminderTimeZone)}
+                {' - '}
                 {reminder.note || 'No note'}{' '}
-                <span className="text-gray-400 italic">— Added by {reminder.added_by}</span>
+                <span className="text-gray-400 italic">- Added by {reminder.added_by}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
           Reminder Date:
@@ -166,9 +157,24 @@ export default function FollowUpForm({
             className="mt-1 w-full border p-2 rounded"
             value={reminderDate}
             onChange={(e) => setReminderDate(e.target.value)}
-            min={dayjs().tz('Asia/Karachi').format('YYYY-MM-DDTHH:mm')}
+            min={nowFollowUpInput(reminderTimeZone)}
             required
           />
+        </label>
+
+        <label className="block">
+          Client Time Zone:
+          <select
+            className="mt-1 w-full border p-2 rounded bg-gray-900"
+            value={reminderTimeZone}
+            onChange={(e) => setReminderTimeZone(e.target.value)}
+          >
+            {FOLLOW_UP_TIME_ZONES.map((zone) => (
+              <option key={zone.value} value={zone.value}>
+                {zone.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="block">
@@ -186,11 +192,7 @@ export default function FollowUpForm({
             className="bg-blue-600 text-white px-4 py-2 rounded"
             disabled={loading}
           >
-            {loading
-              ? 'Saving...'
-              : existingReminder
-              ? 'Update Reminder'
-              : 'Save Reminder'}
+            {loading ? 'Saving...' : existingReminder ? 'Update Reminder' : 'Save Reminder'}
           </button>
 
           <button
@@ -198,7 +200,7 @@ export default function FollowUpForm({
             onClick={() => router.push('/follow-ups')}
             className="text-sm text-blue-600 hover:underline"
           >
-            View All Reminders →
+            View All Reminders
           </button>
         </div>
       </form>

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import supabase from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
-import { format } from "date-fns";
+import { formatFollowUpTime } from "@/lib/followUpTime";
 
 interface FollowUp {
   id: string;
@@ -116,7 +116,7 @@ const FollowUpNotifier: React.FC = () => {
           <div className="bg-white text-black p-6 rounded shadow-lg w-96">
             <h2 className="text-xl font-bold mb-2">Follow-up Due!</h2>
             <p><b>Client:</b> {modalFollowUp.client_name}</p>
-            <p><b>Date:</b> {format(new Date(modalFollowUp.reminder_date), 'yyyy-MM-dd HH:mm')}</p>
+            <p><b>Date:</b> {formatFollowUpTime(modalFollowUp.reminder_date, 'YYYY-MM-DD h:mm A')}</p>
             <p><b>Last Note / Action:</b> {modalFollowUp.action_reason || modalFollowUp.note}</p>
 
             <div className="flex justify-end mt-4 space-x-2">
