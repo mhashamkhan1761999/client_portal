@@ -127,11 +127,14 @@ const AllFollowUps: React.FC = () => {
     const diffMs = target - now;
 
     if (diffMs <= 0) return '0m left';
-    const diffMin = Math.floor(diffMs / 60000);
+    const diffMin = Math.max(1, Math.ceil(diffMs / 60000));
     if (diffMin < 60) return `${diffMin}m left`;
     const h = Math.floor(diffMin / 60);
-    if (h < 24) return `${h}h left`;
+    const m = diffMin % 60;
+    if (h < 24) return m > 0 ? `${h}h ${m}m left` : `${h}h left`;
     const d = Math.floor(h / 24);
+    const remainingHours = h % 24;
+    if (remainingHours > 0) return `${d}d ${remainingHours}h left`;
     return `${d}d left`;
   };
 

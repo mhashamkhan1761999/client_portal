@@ -10,7 +10,7 @@ import AnalyticsDashboard from '@/components/analytics/AnalyticsDashboard'
 import { useAuth } from '@/context/AuthContext'
 import { CLIENT_STATUSES, getClientStatusLabel } from '@/lib/clientStatus'
 
-type DashboardPanel = 'analytics' | 'followups' | 'recent' | 'clients'
+type DashboardPanel = 'analytics' | 'followups' | 'recent' | 'clients' | 'dropped'
 
 export default function Dashboard() {
   const [clients, setClients] = useState<any[]>([])
@@ -69,18 +69,24 @@ export default function Dashboard() {
 
   const visibleClients = user ? clients : []
 
+  const statusAliases: Record<string, string[]> = {
+    interested: ['interested', 'in_progress'],
+    unresponsive: ['unresponsive', 'not_responding'],
+    delivered: ['delivered', 'completed'],
+  }
+
+  const isKnownStatus = (clientStatus?: string) =>
+    CLIENT_STATUSES.some((status) => (statusAliases[status.value] || [status.value]).includes(clientStatus || ''))
+
   const statusCounts = CLIENT_STATUSES.map((status) => ({
     ...status,
     count: visibleClients.filter((client) => {
-      if (status.value === 'interested') {
-        return client.status === 'interested' || client.status === 'in_progress'
-      }
-      if (status.value === 'delivered') {
-        return client.status === 'delivered' || client.status === 'completed'
-      }
-      return client.status === status.value
+      const allowed = statusAliases[status.value] || [status.value]
+      return allowed.includes(client.status || '')
     }).length,
   }))
+  const uncategorizedCount = visibleClients.filter((client) => !isKnownStatus(client.status)).length
+  const droppedClients = visibleClients.filter((client) => client.status === 'drop')
 
   const recentClients = [...visibleClients]
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
@@ -131,6 +137,12 @@ export default function Dashboard() {
               <span className="ml-2 font-semibold text-white">{status.count}</span>
             </div>
           ))}
+          {uncategorizedCount > 0 && (
+            <div className="rounded border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm">
+              <span className="text-rose-200">Uncategorized</span>
+              <span className="ml-2 font-semibold text-white">{uncategorizedCount}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -139,6 +151,7 @@ export default function Dashboard() {
           { id: 'recent', label: 'Recent' },
           { id: 'followups', label: 'Follow-ups' },
           { id: 'clients', label: 'Client Table' },
+          ...(user.role === 'admin' ? [{ id: 'dropped', label: `Dropped (${droppedClients.length})` }] : []),
           { id: 'analytics', label: 'Analytics' },
         ].map((tab) => (
           <button
@@ -186,6 +199,31 @@ export default function Dashboard() {
       )}
 
       {openPanel === 'clients' && <ClientTable />}
+
+      {openPanel === 'dropped' && user.role === 'admin' && (
+        <section className="rounded-lg border border-slate-800 bg-[#161719] p-4">
+          <h2 className="mb-4 text-xl font-semibold text-white">Dropped Clients</h2>
+          {droppedClients.length === 0 ? (
+            <p className="text-sm text-slate-400">No dropped clients.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {droppedClients.map((client) => (
+                <button
+                  key={client.id}
+                  className="rounded border border-rose-900/60 bg-[#1f1f1f] p-4 text-left hover:border-rose-600"
+                  onClick={() => router.push(`/clients/${client.id}`)}
+                >
+                  <div className="font-semibold text-[#c29a4b]">{client.client_name}</div>
+                  <div className="mt-2 text-sm text-rose-300">{getClientStatusLabel(client.status)}</div>
+                  <div className="text-xs text-gray-500">
+                    {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'No date'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </Layout>
   )
 }

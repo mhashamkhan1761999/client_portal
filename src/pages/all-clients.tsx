@@ -16,6 +16,10 @@ type Client = {
   status?: string
   assigned_to?: string
   created_at: string
+  users?: {
+    name?: string
+    sudo_name?: string
+  } | null
 }
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
@@ -45,6 +49,21 @@ const getStatusBadge = (status?: string) => (
     {getClientStatusLabel(status)}
   </span>
 )
+
+const statusAliases: Record<string, string[]> = {
+  interested: ['interested', 'in_progress'],
+  unresponsive: ['unresponsive', 'not_responding'],
+  delivered: ['delivered', 'completed'],
+}
+
+const matchesStatusFilter = (clientStatus: string | undefined, filter: string) => {
+  if (filter === 'all') return true
+  const allowed = statusAliases[filter] || [filter]
+  return allowed.includes(clientStatus || '')
+}
+
+const getSellerName = (client: Client) =>
+  client.users?.sudo_name || client.users?.name || (client.assigned_to ? 'Unknown' : '-')
 
 export default function AllClientsPage() {
   const { user, loading: authLoading } = useAuth()
@@ -87,7 +106,7 @@ export default function AllClientsPage() {
 
     let query = supabase
       .from('clients')
-      .select('*')
+      .select('*, users:assigned_to(name, sudo_name)')
       .order(getSortColumn(), { ascending: !sortOption.includes('_desc') })
 
     if (user.role !== 'admin') {
@@ -112,12 +131,14 @@ export default function AllClientsPage() {
   const filteredClients = useMemo(() => {
     const search = searchTerm.toLowerCase()
     return clients.filter((client) => {
-      if (statusFilter !== 'all' && client.status !== statusFilter) return false
+      if (!matchesStatusFilter(client.status, statusFilter)) return false
+      const sellerName = getSellerName(client).toLowerCase()
       return (
         client.client_name?.toLowerCase().includes(search) ||
         client.email_addresses?.some((email) => email.toLowerCase().includes(search)) ||
         client.phone_numbers?.some((phone) => phone.includes(search)) ||
-        client.status?.toLowerCase().includes(search)
+        client.status?.toLowerCase().includes(search) ||
+        sellerName.includes(search)
       )
     })
   }, [clients, searchTerm, statusFilter])
@@ -191,6 +212,7 @@ export default function AllClientsPage() {
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Email Address</th>
+                  <th className="px-4 py-3">Seller</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Created At</th>
                   <th className="px-4 py-3">Actions</th>
@@ -203,6 +225,7 @@ export default function AllClientsPage() {
                     <td className="px-4 py-3 font-medium text-white">{client.client_name}</td>
                     <td className="px-4 py-3">{client.phone_numbers?.[0] ? formatUSPhone(client.phone_numbers[0]) : '-'}</td>
                     <td className="px-4 py-3">{client.email_addresses?.join(', ') || '-'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-200">{getSellerName(client)}</td>
                     <td className="px-4 py-3">{getStatusBadge(client.status)}</td>
                     <td className="px-4 py-3">{formatDate(client.created_at)}</td>
                     <td className="px-4 py-3">

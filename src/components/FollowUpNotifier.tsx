@@ -19,6 +19,9 @@ const FollowUpNotifier: React.FC = () => {
   const [dueFollowUps, setDueFollowUps] = useState<FollowUp[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [modalFollowUp, setModalFollowUp] = useState<FollowUp | null>(null);
+  const [useLocalAcknowledgments, setUseLocalAcknowledgments] = useState(false);
+
+  const getLocalAckKey = (followUpId: string) => `follow-up-ack:${user?.id}:${followUpId}`;
 
   useEffect(() => {
     if (!user) return;
@@ -49,14 +52,27 @@ const FollowUpNotifier: React.FC = () => {
       for (let fu of data || []) {
         const clientRelation = fu.clients as { client_name?: string } | { client_name?: string }[] | null;
 
-        // check acknowledgment for this user
-        const { data: ackData } = await supabase
-          .from("follow_up_acknowledgments")
-          .select("*")
-          .eq("follow_up_id", fu.id)
-          .eq("user_id", user.id);
+        let isAcknowledged = false;
 
-        if (!ackData || ackData.length === 0) {
+        if (useLocalAcknowledgments) {
+          isAcknowledged = localStorage.getItem(getLocalAckKey(fu.id)) === "true";
+        } else {
+          const { data: ackData, error: ackError } = await supabase
+            .from("follow_up_acknowledgments")
+            .select("id")
+            .eq("follow_up_id", fu.id)
+            .eq("user_id", user.id);
+
+          if (ackError) {
+            console.error("Error checking follow-up acknowledgment:", ackError);
+            setUseLocalAcknowledgments(true);
+            isAcknowledged = localStorage.getItem(getLocalAckKey(fu.id)) === "true";
+          } else {
+            isAcknowledged = Boolean(ackData && ackData.length > 0);
+          }
+        }
+
+        if (!isAcknowledged) {
           unacknowledged.push({
             id: fu.id,
             client_name: Array.isArray(clientRelation)
@@ -93,19 +109,31 @@ const FollowUpNotifier: React.FC = () => {
     checkFollowUps();
     const interval = setInterval(checkFollowUps, 60 * 1000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, useLocalAcknowledgments]);
 
   const acknowledgeFollowUp = async (fu: FollowUp) => {
     if (!user) return;
 
-    await supabase.from("follow_up_acknowledgments").insert({
-      follow_up_id: fu.id,
-      user_id: user.id,
-      triggered_by: null, // or system/admin if you track
-    });
+    if (useLocalAcknowledgments) {
+      localStorage.setItem(getLocalAckKey(fu.id), "true");
+    } else {
+      const { error } = await supabase.from("follow_up_acknowledgments").insert({
+        follow_up_id: fu.id,
+        user_id: user.id,
+        triggered_by: null,
+      });
+
+      if (error) {
+        console.error("Error saving follow-up acknowledgment:", error);
+        setUseLocalAcknowledgments(true);
+        localStorage.setItem(getLocalAckKey(fu.id), "true");
+      }
+    }
 
     toast.success(`Acknowledged follow-up for ${fu.client_name}`);
+    setDueFollowUps((prev) => prev.filter((item) => item.id !== fu.id));
     setShowModal(false);
+    setModalFollowUp(null);
   };
 
   return (
