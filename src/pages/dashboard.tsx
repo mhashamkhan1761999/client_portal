@@ -11,12 +11,17 @@ import { useAuth } from '@/context/AuthContext'
 import { CLIENT_STATUSES, getClientStatusLabel } from '@/lib/clientStatus'
 
 type DashboardPanel = 'analytics' | 'followups' | 'recent' | 'clients' | 'dropped'
+const toDateInput = (date: Date) => date.toISOString().slice(0, 10)
 
 export default function Dashboard() {
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const [openPanel, setOpenPanel] = useState<DashboardPanel>('recent')
+  const [salesTotal, setSalesTotal] = useState(0)
+  const [salesPeriod, setSalesPeriod] = useState('current_month')
+  const [salesStart, setSalesStart] = useState(toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
+  const [salesEnd, setSalesEnd] = useState(toDateInput(new Date()))
   const router = useRouter()
   const { user } = useAuth()
 
@@ -67,6 +72,52 @@ export default function Dashboard() {
     fetchClients()
   }, [user])
 
+  useEffect(() => {
+    if (!user) return
+
+    const fetchSalesTotal = async () => {
+      const now = new Date()
+      const start =
+        salesPeriod === 'last_quarter'
+          ? toDateInput(new Date(now.getFullYear(), now.getMonth() - 3, 1))
+          : salesPeriod === 'last_year'
+            ? toDateInput(new Date(now.getFullYear() - 1, now.getMonth(), 1))
+            : salesPeriod === 'custom'
+              ? salesStart
+              : toDateInput(new Date(now.getFullYear(), now.getMonth(), 1))
+      const end =
+        salesPeriod === 'custom'
+          ? salesEnd
+          : salesPeriod === 'all'
+            ? ''
+            : toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1))
+
+      let query = supabase
+        .from('client_sales')
+        .select('total_amount, seller_user_id, sale_date')
+
+      if (salesPeriod !== 'all') {
+        query = query.gte('sale_date', start)
+        query = salesPeriod === 'custom' ? query.lte('sale_date', end) : query.lt('sale_date', end)
+      }
+
+      if (user.role !== 'admin') {
+        query = query.eq('seller_user_id', user.id)
+      }
+
+      const { data, error } = await query
+      if (error) {
+        console.error('Error fetching dashboard sales total:', error)
+        setSalesTotal(0)
+        return
+      }
+
+      setSalesTotal((data || []).reduce((sum, sale: any) => sum + Number(sale.total_amount || 0), 0))
+    }
+
+    fetchSalesTotal()
+  }, [salesEnd, salesPeriod, salesStart, user])
+
   const visibleClients = user ? clients : []
 
   const statusAliases: Record<string, string[]> = {
@@ -97,6 +148,7 @@ export default function Dashboard() {
     { label: 'Connected', value: statusCounts.find((item) => item.value === 'connected')?.count || 0 },
     { label: 'Interested', value: statusCounts.find((item) => item.value === 'interested')?.count || 0 },
     { label: 'Converted', value: statusCounts.find((item) => item.value === 'converted')?.count || 0 },
+    { label: 'Total Sales', value: `$${salesTotal.toLocaleString()}` },
   ]
 
   if (loading || !user) {
@@ -120,13 +172,36 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {pipelineCards.map((item) => (
           <div key={item.label} className="rounded-lg border border-slate-800 bg-[#161719] p-4">
             <div className="text-xs uppercase text-slate-500">{item.label}</div>
             <div className="mt-2 text-2xl font-bold text-white">{item.value}</div>
           </div>
         ))}
+      </div>
+
+      <div className="mb-5 flex flex-wrap items-end gap-2 rounded-lg border border-slate-800 bg-[#111214] p-3">
+        <label className="text-sm text-slate-300">
+          Sales period
+          <select
+            className="mt-1 block rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white"
+            value={salesPeriod}
+            onChange={(event) => setSalesPeriod(event.target.value)}
+          >
+            <option value="current_month">Current month</option>
+            <option value="last_quarter">Last quarter</option>
+            <option value="last_year">Last year</option>
+            <option value="custom">Custom</option>
+            <option value="all">All dates</option>
+          </select>
+        </label>
+        {salesPeriod === 'custom' && (
+          <>
+            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={salesStart} onChange={(event) => setSalesStart(event.target.value)} />
+            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={salesEnd} onChange={(event) => setSalesEnd(event.target.value)} />
+          </>
+        )}
       </div>
 
       <div className="mb-6 rounded-lg border border-slate-800 bg-[#111214] p-3">

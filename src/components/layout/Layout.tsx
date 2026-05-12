@@ -55,6 +55,10 @@ export default function Layout({ children }: { children: ReactNode }) {
     
   ]
 
+  if (['admin', 'sales_head', 'seller', 'upseller', 'nurturer'].includes(currentUser?.role)) {
+    menuItems.push({ name: 'Sales Archive', path: '/finance' })
+  }
+
   if (currentUser?.role === 'admin') {
     menuItems.push({ name: 'User Management', path: '/admin/users' })
     // menuItems.push({ name: 'Services', path: '/services' })

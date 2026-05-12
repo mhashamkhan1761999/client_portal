@@ -20,11 +20,12 @@ const FollowUpNotifier: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalFollowUp, setModalFollowUp] = useState<FollowUp | null>(null);
   const [useLocalAcknowledgments, setUseLocalAcknowledgments] = useState(false);
+  const [followUpsUnavailable, setFollowUpsUnavailable] = useState(false);
 
   const getLocalAckKey = (followUpId: string) => `follow-up-ack:${user?.id}:${followUpId}`;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || followUpsUnavailable) return;
 
     const checkFollowUps = async () => {
       const now = new Date().toISOString();
@@ -45,7 +46,20 @@ const FollowUpNotifier: React.FC = () => {
         .eq("is_completed", false)
         .lte("reminder_date", now);
 
-      if (error) return console.error(error);
+      if (error) {
+        const isMissingFollowUpsTable =
+          error.code === "PGRST205" ||
+          error.code === "42P01" ||
+          (error.message || "").includes("follow_ups");
+
+        if (isMissingFollowUpsTable) {
+          console.warn("Follow-up notifications are disabled because the follow_ups table is not available.");
+          setFollowUpsUnavailable(true);
+          return;
+        }
+
+        return console.error(error);
+      }
 
       const unacknowledged: FollowUp[] = [];
 
@@ -109,7 +123,7 @@ const FollowUpNotifier: React.FC = () => {
     checkFollowUps();
     const interval = setInterval(checkFollowUps, 60 * 1000);
     return () => clearInterval(interval);
-  }, [user, useLocalAcknowledgments]);
+  }, [user, useLocalAcknowledgments, followUpsUnavailable]);
 
   const acknowledgeFollowUp = async (fu: FollowUp) => {
     if (!user) return;
