@@ -7,7 +7,6 @@ import ClientNotes from '@/components/clients/ClientNotes'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import ClientModal from '@/components/clients/ClientModal'
-import ServiceModal from '@/components/shared/DetailModal' // Adjust the import path as needed
 import AddServiceModal from '../../components/clients/AddServiceModal'
 import FollowUpForm from '@/components/FollowUpForm'
 import dayjs from 'dayjs'
@@ -16,6 +15,8 @@ import { getLeadNatureLabel } from '@/lib/leadNature'
 import { TRANSFER_REASONS, getTransferReasonLabel } from '@/lib/leadTransfer'
 import { ASSIGNMENT_STATUSES, ASSIGNMENT_TYPES, getAssignmentStatusLabel, getAssignmentTypeLabel } from '@/lib/clientAssignment'
 import { useAuth } from '@/context/AuthContext'
+import SalesLedger from '@/components/finance/SalesLedger'
+import AddSaleModal from '@/components/finance/AddSaleModal'
 
 
 
@@ -28,8 +29,7 @@ export default function SingleClientPage() {
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [clientServices, setClientServices] = useState<any[]>([])
-  const [showServiceModal, setShowServiceModal] = useState(false)
-  const [selectedService, setSelectedService] = useState<any | null>(null)
+  const [showAddSaleModal, setShowAddSaleModal] = useState(false)
   const [openAddModal, setOpenAddModal] = useState(false)
   const [services, setServices] = useState<any[]>([])
   const [number, setNumber] = useState<any[]>([])
@@ -50,7 +50,7 @@ export default function SingleClientPage() {
   const [assignmentRemarks, setAssignmentRemarks] = useState('')
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   const [showFullDetails, setShowFullDetails] = useState(false)
-  const [activeClientPanel, setActiveClientPanel] = useState<'people' | 'history' | 'followups' | 'notes'>('people')
+  const [activeClientPanel, setActiveClientPanel] = useState<'people' | 'sales' | 'history' | 'followups' | 'notes'>('people')
 
   type ClientFollowUp = {
     id: string
@@ -93,7 +93,7 @@ export default function SingleClientPage() {
 
   const getPlatformLabel = (id: string | undefined) => {
     const platform = number.find((n) => n.id === id)
-    return platform ? `${platform.platform} (${platform.phone_number})` : 'Not Set'
+    return platform ? `${platform.platform} (${platform.phone_number})` : id || 'Not Set'
   }
 
   const fetchClientWithDetails = async () => {
@@ -178,17 +178,24 @@ export default function SingleClientPage() {
       lead_gen_name: leadAgentName,
     })
 
-    // 6. Client's purchased services (if any)
+    // 6. Client sales snapshot
     let serviceDetails: any[] = []
 
     if (clientId) {
-      const { data: salesData, error: salesError } = await supabase
-        .from('client_service_sales')
-        .select('id, package_name, price, sold_price, description, service_id')
+      let salesQuery = supabase
+        .from('client_sales')
+        .select('id, seller_user_id, sold_items, total_amount, status, invoice_number, sale_date')
         .eq('client_id', clientId)
+        .order('sale_date', { ascending: false })
+
+      if (user?.role !== 'admin' && user?.id) {
+        salesQuery = salesQuery.eq('seller_user_id', user.id)
+      }
+
+      const { data: salesData, error: salesError } = await salesQuery
 
       if (salesError) {
-        console.error('Error fetching client_service_sales:', salesError)
+        console.error('Error fetching client sales:', salesError)
       } else {
         serviceDetails = salesData || []
       }
@@ -443,11 +450,11 @@ export default function SingleClientPage() {
   }
 
   useEffect(() => {
-    if (!router.isReady || !clientId || typeof clientId !== 'string') return
+    if (!router.isReady || !clientId || typeof clientId !== 'string' || !user) return
     fetchClientWithDetails()
     if (clientId) fetchFollowUps()
 
-  }, [router.isReady, clientId])
+  }, [router.isReady, clientId, user])
 
 
   if (!router.isReady || loading) {
@@ -533,11 +540,24 @@ export default function SingleClientPage() {
                 Add Connected Person
               </button>
 
-              <button onClick={() => setOpenAddModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded">
+              <button onClick={() => {
+                setShowAddSaleModal(true)
+                setActiveClientPanel('sales')
+              }} className="hidden bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded">
                 ➕ Add Service
               </button>
               
             
+              <button
+                className="bg-slate-700 hover:bg-slate-600 text-white text-sm px-4 py-2 rounded"
+                onClick={() => {
+                  setShowAddSaleModal(true)
+                  setActiveClientPanel('sales')
+                }}
+              >
+                Add Sale
+              </button>
+
               <button
                 className="bg-[#c29a4b] hover:bg-[#d3aa57] text-black text-sm px-4 py-2 rounded"
                 onClick={() => setShowEditModal(true)}
@@ -554,7 +574,7 @@ export default function SingleClientPage() {
           <SummaryItem label="Owner" value={client?.sudo_name || '-'} />
           <SummaryItem label="Lead Gen" value={client.lead_gen_name || '-'} />
           <SummaryItem label="Connected People" value={assignments.length} />
-          <SummaryItem label="Services" value={clientServices.length} />
+          <SummaryItem label="Sales" value={clientServices.length} />
         </div>
 
         {/* Info Grid */}
@@ -656,12 +676,12 @@ export default function SingleClientPage() {
           </div>
 
          
-          {/* Services Section with Smooth Scroll */}
+          {/* Sales Section with Smooth Scroll */}
           <div className="max-h-[350px] overflow-y-auto pr-2 scroll-smooth scrollbar-custom">
 
             <div className="grid grid-cols-1 gap-4">
               {clientServices.length === 0 ? (
-                <div className="text-gray-400 text-sm">No services added yet.</div>
+                <div className="text-gray-400 text-sm">No sales added yet.</div>
               ) : (
                 clientServices.map((service) => {
                   return (
@@ -669,22 +689,24 @@ export default function SingleClientPage() {
                       key={service.id}
                       className="p-4 rounded-lg text-white shadow-md bg-[#161719] border border-gray-700"
                     >
-                      <h3 className="text-lg font-bold">{service.package_name}</h3>
-                      <p>
-                        {service.description && service.description.length > 100
-                          ? service.description.substring(0, 100) + "..."
-                          : service.description || 'No description available'}
+                      <h3 className="text-lg font-bold">{service.sold_items?.split('\n')[0]?.replace('Service: ', '') || 'Sale'}</h3>
+                      <p className="mt-1 text-sm text-slate-300">
+                        {service.sold_items && service.sold_items.length > 120
+                          ? service.sold_items.substring(0, 120) + '...'
+                          : service.sold_items || 'No sale details available'}
                       </p>
-                      <p className="text-md font-semibold mt-2">${service.sold_price}</p>
-                      <button
-                        className="mt-4 bg-black bg-opacity-30 hover:bg-opacity-50 px-3 py-1 rounded text-xs"
-                        onClick={() => {
-                          setSelectedService(service)
-                          setShowServiceModal(true)
-                        }}
-                      >
-                        View Details
-                      </button>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="font-semibold text-[#c29a4b]">${service.total_amount}</span>
+                        <div className="flex flex-wrap gap-2">
+                          <Link href={`/finance/sales/${service.id}`}>
+                            <button className="rounded bg-sky-700 px-2 py-1 text-xs text-white hover:bg-sky-600">
+                              Payments
+                            </button>
+                          </Link>
+                          <span className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{service.status}</span>
+                        </div>
+                      </div>
+                      {service.invoice_number && <p className="mt-2 text-xs text-slate-500">Invoice: {service.invoice_number}</p>}
                     </div>
                   )
                 })
@@ -696,6 +718,7 @@ export default function SingleClientPage() {
         <div className="flex flex-wrap gap-2">
           {[
             { id: 'people', label: `People (${assignments.length})` },
+            { id: 'sales', label: 'Sales' },
             { id: 'history', label: `History (${transferLogs.length})` },
             { id: 'followups', label: 'Follow-ups' },
             { id: 'notes', label: 'Notes / Assets' },
@@ -782,6 +805,12 @@ export default function SingleClientPage() {
             </div>
           )}
         </div>
+        )}
+
+        {activeClientPanel === 'sales' && (
+          <div className="mt-6">
+            <SalesLedger clientId={clientId} clientName={client.client_name} />
+          </div>
         )}
 
         {activeClientPanel === 'history' && (
@@ -1017,11 +1046,13 @@ export default function SingleClientPage() {
         </div>
       )}
 
-        <ServiceModal
-            service={selectedService}
-            open={showServiceModal}
-            onClose={() => setShowServiceModal(false)}
-          />
+      <AddSaleModal
+        isOpen={showAddSaleModal}
+        onClose={() => setShowAddSaleModal(false)}
+        clientId={clientId}
+        clientName={client.client_name}
+        onSaved={fetchClientWithDetails}
+      />
 
       <AddServiceModal
         isOpen={openAddModal}
