@@ -308,6 +308,7 @@ export default function SingleClientPage() {
   const canEditMainClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
   const canWorkClient = Boolean(canEditMainClient || isConnectedUser)
   const nonAdminUsers = users.filter((item) => item.role !== 'admin')
+  const connectedPersonUsers = users
 
   const openAddAssignmentModal = () => {
     setEditingAssignmentId(null)
@@ -966,7 +967,7 @@ export default function SingleClientPage() {
                   disabled={!canEditMainClient || Boolean(editingAssignmentId)}
                 >
                   <option value="">Select person</option>
-                  {nonAdminUsers.map((item) => (
+                  {connectedPersonUsers.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.sudo_name || item.name}
                     </option>
