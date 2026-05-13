@@ -10,6 +10,23 @@ export const LEAD_NATURE_OPTIONS = [
   { value: 'other', label: 'Other' },
 ] as const
 
-export const getLeadNatureLabel = (value?: string | null) => {
-  return LEAD_NATURE_OPTIONS.find((item) => item.value === value)?.label || value || '-'
+export const parseLeadNatureValues = (value?: string | string[] | null) => {
+  if (Array.isArray(value)) return value.filter(Boolean)
+  return (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+export const formatLeadNatureValues = (values?: string[]) => {
+  return (values || []).filter(Boolean).join(',')
+}
+
+export const getLeadNatureLabel = (value?: string | string[] | null) => {
+  const values = parseLeadNatureValues(value)
+  if (values.length === 0) return '-'
+
+  return values
+    .map((item) => LEAD_NATURE_OPTIONS.find((option) => option.value === item)?.label || item)
+    .join(', ')
 }

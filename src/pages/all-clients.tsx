@@ -16,6 +16,11 @@ type Client = {
   status?: string
   assigned_to?: string
   created_at: string
+  follow_ups?: {
+    id: string
+    reminder_date?: string
+    is_completed?: boolean
+  }[]
   users?: {
     name?: string
     sudo_name?: string
@@ -62,6 +67,9 @@ const matchesStatusFilter = (clientStatus: string | undefined, filter: string) =
   return allowed.includes(clientStatus || '')
 }
 
+const hasPendingFollowUp = (client: Client) =>
+  client.follow_ups?.some((followUp) => !followUp.is_completed) || false
+
 const getSellerName = (client: Client) =>
   client.users?.sudo_name || client.users?.name || (client.assigned_to ? 'Unknown' : '-')
 
@@ -106,7 +114,7 @@ export default function AllClientsPage() {
 
     let query = supabase
       .from('clients')
-      .select('*, users:assigned_to(name, sudo_name)')
+      .select('*, users:assigned_to(name, sudo_name), follow_ups(id, reminder_date, is_completed)')
       .order(getSortColumn(), { ascending: !sortOption.includes('_desc') })
 
     if (user.role !== 'admin') {
@@ -131,7 +139,11 @@ export default function AllClientsPage() {
   const filteredClients = useMemo(() => {
     const search = searchTerm.toLowerCase()
     return clients.filter((client) => {
-      if (!matchesStatusFilter(client.status, statusFilter)) return false
+      if (statusFilter === 'followups') {
+        if (!hasPendingFollowUp(client)) return false
+      } else if (!matchesStatusFilter(client.status, statusFilter)) {
+        return false
+      }
       const sellerName = getSellerName(client).toLowerCase()
       return (
         client.client_name?.toLowerCase().includes(search) ||
@@ -171,7 +183,7 @@ export default function AllClientsPage() {
 
         <div className="mb-4 flex flex-wrap justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            {['all', ...CLIENT_STATUSES.map((status) => status.value)].map((status) => (
+            {['all', ...CLIENT_STATUSES.map((status) => status.value), 'followups'].map((status) => (
               <button
                 key={status}
                 className={`rounded border px-3 py-1.5 text-sm transition ${
@@ -184,7 +196,7 @@ export default function AllClientsPage() {
                   setStatusFilter(status)
                 }}
               >
-                {status === 'all' ? 'All' : getClientStatusLabel(status)}
+                {status === 'all' ? 'All' : status === 'followups' ? 'Follow-ups' : getClientStatusLabel(status)}
               </button>
             ))}
           </div>

@@ -5,7 +5,25 @@ import toast from 'react-hot-toast'
 import supabase from '../../lib/supabaseClient'
 import { useRouter } from 'next/navigation';
 import { CLIENT_STATUSES } from '@/lib/clientStatus'
-import { LEAD_NATURE_OPTIONS } from '@/lib/leadNature'
+import { formatLeadNatureValues, LEAD_NATURE_OPTIONS, parseLeadNatureValues } from '@/lib/leadNature'
+
+const getEmptyForm = () => ({
+  client_name: '',
+  phone_numbers: [''],
+  email_addresses: [''],
+  work_email: '',
+  website_url: '',
+  status: 'new',
+  assigned_to: '',
+  connecting_platform: '',
+  gender: '',
+  profile_url: '',
+  platform: '',
+  lead_gen_id: '',
+  lead_nature: [] as string[],
+  secondary_phones: [''],
+  business_name: '',
+})
 
 export default function ClientModal({
   open,
@@ -25,23 +43,7 @@ export default function ClientModal({
 }) {
   const router = useRouter()
 
-  const [form, setForm] = useState({
-    client_name: '',
-    phone_numbers: [''],
-    email_addresses: [''],
-    work_email: '',
-    website_url: '',
-    status: 'new',
-    assigned_to: '',
-    connecting_platform: '',
-    gender: '',
-    profile_url: '',
-    platform: '',
-    lead_gen_id: '',
-    lead_nature: '',
-    secondary_phones: [''],
-    business_name: '',
-  })
+  const [form, setForm] = useState(getEmptyForm)
 
   const [users, setUsers] = useState<any[]>([])
   const [services, setServices] = useState<any[]>([])
@@ -50,6 +52,8 @@ export default function ClientModal({
   const [newService, setNewService] = useState({ name: '', description: '', })
   const [errors, setErrors] = useState<any>({})
   const [leadGens, setLeadGens] = useState<{ id: string; name: string }[]>([])
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  const draftKey = `client-modal-draft:${currentUser?.id || 'anonymous'}`
 
   const validateForm = () => {
   const newErrors: any = {}
@@ -72,6 +76,7 @@ export default function ClientModal({
 
 
   useEffect(() => {
+    setDraftLoaded(false)
     fetchUsers()
     fetchNumbers()
     fetchLeadGens()
@@ -90,16 +95,43 @@ export default function ClientModal({
         profile_url: clientData.profile_url || '',
         platform: clientData.platform || '',
         lead_gen_id: clientData?.lead_gen_id || '',
-        lead_nature: clientData?.lead_nature || '',
+        lead_nature: parseLeadNatureValues(clientData?.lead_nature),
         secondary_phones: clientData.secondary_phones || [''],
         business_name: clientData.business_name || '',
         
         
       })
-    } else if (currentUser?.role !== 'admin') {
-      setForm(prev => ({ ...prev, assigned_to: currentUser?.id }))
+      setDraftLoaded(true)
+    } else {
+      let nextForm = getEmptyForm()
+
+      if (typeof window !== 'undefined') {
+        const savedDraft = window.localStorage.getItem(draftKey)
+        if (savedDraft) {
+          try {
+            nextForm = {
+              ...nextForm,
+              ...JSON.parse(savedDraft),
+            }
+          } catch {
+            window.localStorage.removeItem(draftKey)
+          }
+        }
+      }
+
+      if (currentUser?.role !== 'admin' && !nextForm.assigned_to) {
+        nextForm.assigned_to = currentUser?.id || ''
+      }
+
+      setForm(nextForm)
+      setDraftLoaded(true)
     }
-  }, [clientData])
+  }, [clientData, currentUser?.id, currentUser?.role])
+
+  useEffect(() => {
+    if (!open || clientData || !draftLoaded || typeof window === 'undefined') return
+    window.localStorage.setItem(draftKey, JSON.stringify(form))
+  }, [form, open, clientData, draftKey, draftLoaded])
 
   const fetchUsers = async () => {
     const { data } = await supabase
@@ -140,10 +172,21 @@ export default function ClientModal({
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  const handleLeadNatureToggle = (value: string) => {
+    setForm((prev) => {
+      const selected = prev.lead_nature.includes(value)
+        ? prev.lead_nature.filter((item) => item !== value)
+        : [...prev.lead_nature, value]
+
+      return { ...prev, lead_nature: selected }
+    })
+  }
+
   const handleSubmit = async () => {
     if (!validateForm()) return
 
     const phoneToCheck = form.phone_numbers[0]?.trim()
+    const emailsToCheck = form.email_addresses.map((email) => email.trim()).filter(Boolean)
     const normalizedForm = {
       ...form,
       phone_numbers: form.phone_numbers.map((phone) => phone.trim()).filter(Boolean),
@@ -151,25 +194,59 @@ export default function ClientModal({
       work_email: form.work_email.trim(),
       profile_url: form.profile_url.trim(),
       website_url: form.website_url.trim(),
-      lead_nature: form.lead_nature,
+      lead_nature: formatLeadNatureValues(form.lead_nature),
       secondary_phones: form.secondary_phones.map((phone) => phone.trim()).filter(Boolean),
     }
 
-    const duplicateFilters = [`client_name.eq.${normalizedForm.client_name}`]
-    if (normalizedForm.work_email) duplicateFilters.push(`work_email.eq.${normalizedForm.work_email}`)
+    const duplicateChecks = [
+      supabase
+        .from('clients')
+        .select('id, client_name, phone_numbers, email_addresses, work_email')
+        .ilike('client_name', normalizedForm.client_name),
+    ]
 
-    const { data: possibleDuplicates } = await supabase
-      .from('clients')
-      .select('id, client_name, phone_numbers')
-      .or(duplicateFilters.join(','))
+    if (normalizedForm.work_email) {
+      duplicateChecks.push(
+        supabase
+          .from('clients')
+          .select('id, client_name, phone_numbers, email_addresses, work_email')
+          .ilike('work_email', normalizedForm.work_email)
+      )
+    }
+
+    if (phoneToCheck) {
+      duplicateChecks.push(
+        supabase
+          .from('clients')
+          .select('id, client_name, phone_numbers, email_addresses, work_email')
+          .contains('phone_numbers', [phoneToCheck])
+      )
+    }
+
+    emailsToCheck.forEach((email) => {
+      duplicateChecks.push(
+        supabase
+          .from('clients')
+          .select('id, client_name, phone_numbers, email_addresses, work_email')
+          .contains('email_addresses', [email])
+      )
+    })
+
+    const duplicateResults = await Promise.all(duplicateChecks)
+    const possibleDuplicates = duplicateResults.flatMap((result) => result.data || [])
 
     const duplicate = possibleDuplicates?.find((c: any) => {
       if (clientData && c.id === clientData.id) return false
-      return c.client_name === normalizedForm.client_name || (phoneToCheck && c.phone_numbers?.includes(phoneToCheck))
+      return (
+        c.client_name?.trim().toLowerCase() === normalizedForm.client_name.trim().toLowerCase() ||
+        (normalizedForm.work_email && c.work_email?.trim().toLowerCase() === normalizedForm.work_email.toLowerCase()) ||
+        (phoneToCheck && c.phone_numbers?.includes(phoneToCheck)) ||
+        emailsToCheck.some((email) => c.email_addresses?.includes(email))
+      )
     })
 
     if (duplicate) {
-      toast.error('Client already exists with same name, email, or phone number.')
+      toast.error('This client is already added to the portal.')
       return
     }
 
@@ -248,6 +325,10 @@ export default function ClientModal({
       }
 
       toast.success('Client added successfully')
+    }
+
+    if (!clientData && typeof window !== 'undefined') {
+      window.localStorage.removeItem(draftKey)
     }
 
     onSaved()
@@ -500,18 +581,19 @@ export default function ClientModal({
 
           <div>
             <label className="block text-sm mb-1">Lead Nature</label>
-            <select
-              className="w-full bg-[#111] border border-gray-600 rounded px-3 py-2"
-              value={form.lead_nature}
-              onChange={(e) => handleChange('lead_nature', e.target.value)}
-            >
-              <option value="">Select Lead Nature</option>
+            <div className="grid grid-cols-1 gap-2 rounded border border-gray-600 bg-[#111] p-3 sm:grid-cols-2">
               {LEAD_NATURE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
+                <label key={option.value} className="flex items-center gap-2 text-sm text-gray-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#c29a4b]"
+                    checked={form.lead_nature.includes(option.value)}
+                    onChange={() => handleLeadNatureToggle(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Service */}
