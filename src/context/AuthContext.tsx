@@ -24,15 +24,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUser = async () => {
-    setLoading(true);
+  const fetchUser = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
 
     const { data: sessionData } = await supabase.auth.getSession();
     const id = sessionData?.session?.user?.id;
 
     if (!id) {
       setUser(null);
-      setLoading(false);
+      if (showLoading) setLoading(false);
       return;
     }
 
@@ -52,14 +52,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(dbUser as AuthUser);
     }
 
-    setLoading(false);
+    if (showLoading) setLoading(false);
   };
 
   useEffect(() => {
     fetchUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      fetchUser();
+      fetchUser(false);
     });
 
     return () => {
