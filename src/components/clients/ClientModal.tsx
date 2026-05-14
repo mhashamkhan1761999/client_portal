@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner'
 import supabase from '../../lib/supabaseClient'
 import { useRouter } from 'next/navigation';
 import { CLIENT_STATUSES } from '@/lib/clientStatus'
@@ -53,6 +53,7 @@ export default function ClientModal({
   const [errors, setErrors] = useState<any>({})
   const [leadGens, setLeadGens] = useState<{ id: string; name: string }[]>([])
   const [draftLoaded, setDraftLoaded] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const draftKey = `client-modal-draft:${currentUser?.id || 'anonymous'}`
 
   const validateForm = () => {
@@ -185,18 +186,33 @@ export default function ClientModal({
   const handleSubmit = async () => {
     if (!validateForm()) return
 
-    const phoneToCheck = form.phone_numbers[0]?.trim()
-    const emailsToCheck = form.email_addresses.map((email) => email.trim()).filter(Boolean)
-    const normalizedForm = {
-      ...form,
-      phone_numbers: form.phone_numbers.map((phone) => phone.trim()).filter(Boolean),
-      email_addresses: form.email_addresses.map((email) => email.trim()).filter(Boolean),
-      work_email: form.work_email.trim(),
-      profile_url: form.profile_url.trim(),
-      website_url: form.website_url.trim(),
-      lead_nature: formatLeadNatureValues(form.lead_nature),
-      secondary_phones: form.secondary_phones.map((phone) => phone.trim()).filter(Boolean),
-    }
+    setIsSubmitting(true)
+
+    try {
+      const { data: authData } = await supabase.auth.getUser()
+      const fallbackOwnerId = !clientData && currentUser?.role !== 'admin'
+        ? currentUser?.id || authData.user?.id || ''
+        : ''
+      const ownerId = form.assigned_to || fallbackOwnerId
+      const phoneToCheck = form.phone_numbers[0]?.trim()
+      const emailsToCheck = form.email_addresses.map((email) => email.trim()).filter(Boolean)
+      const normalizedForm = {
+        ...form,
+        phone_numbers: form.phone_numbers.map((phone) => phone.trim()).filter(Boolean),
+        email_addresses: form.email_addresses.map((email) => email.trim()).filter(Boolean),
+        work_email: form.work_email.trim(),
+        profile_url: form.profile_url.trim(),
+        website_url: form.website_url.trim(),
+        assigned_to: ownerId || null,
+        lead_gen_id: form.lead_gen_id || null,
+        lead_nature: formatLeadNatureValues(form.lead_nature),
+        secondary_phones: form.secondary_phones.map((phone) => phone.trim()).filter(Boolean),
+      }
+
+      if (!normalizedForm.assigned_to) {
+        toast.error('Could not identify who this client should be assigned to. Please refresh and try again.')
+        return
+      }
 
     const duplicateChecks = [
       supabase
@@ -276,7 +292,6 @@ export default function ClientModal({
       const statusChanged = clientData.status !== normalizedForm.status
 
       if (clientId && statusChanged) {
-        const { data: authData } = await supabase.auth.getUser()
         const changedBy =
           currentUser && typeof currentUser === 'object' && currentUser.id
             ? currentUser.id
@@ -311,7 +326,6 @@ export default function ClientModal({
       clientId = inserted.id
 
       if (normalizedForm.assigned_to) {
-        const { data: authData } = await supabase.auth.getUser()
         await supabase.from('client_assignments').insert({
           client_id: clientId,
           user_id: normalizedForm.assigned_to,
@@ -333,6 +347,9 @@ export default function ClientModal({
 
     onSaved()
     onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const fetchLeadGens = async () => {
@@ -682,9 +699,10 @@ export default function ClientModal({
           </button>
           <button
             onClick={handleSubmit}
-            className="bg-[#c29a4b] text-black px-6 py-2 font-semibold rounded hover:bg-yellow-500"
+            disabled={isSubmitting}
+            className="bg-[#c29a4b] text-black px-6 py-2 font-semibold rounded hover:bg-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {clientData ? 'Update' : 'Add Client'}
+            {isSubmitting ? 'Saving...' : clientData ? 'Update' : 'Add Client'}
           </button>
         </div>
       </div>
