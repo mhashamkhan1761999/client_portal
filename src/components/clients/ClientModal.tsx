@@ -214,12 +214,7 @@ export default function ClientModal({
         return
       }
 
-    const duplicateChecks = [
-      supabase
-        .from('clients')
-        .select('id, client_name, phone_numbers, email_addresses, work_email')
-        .ilike('client_name', normalizedForm.client_name),
-    ]
+    const duplicateChecks = []
 
     if (normalizedForm.work_email) {
       duplicateChecks.push(
@@ -254,7 +249,6 @@ export default function ClientModal({
     const duplicate = possibleDuplicates?.find((c: any) => {
       if (clientData && c.id === clientData.id) return false
       return (
-        c.client_name?.trim().toLowerCase() === normalizedForm.client_name.trim().toLowerCase() ||
         (normalizedForm.work_email && c.work_email?.trim().toLowerCase() === normalizedForm.work_email.toLowerCase()) ||
         (phoneToCheck && c.phone_numbers?.includes(phoneToCheck)) ||
         emailsToCheck.some((email) => c.email_addresses?.includes(email))
