@@ -25,6 +25,16 @@ const getEmptyForm = () => ({
   business_name: '',
 })
 
+const normalizeText = (value: unknown) => String(value || '').trim().toLowerCase()
+const normalizeList = (value: unknown) =>
+  (Array.isArray(value) ? value : [])
+    .map((item) => normalizeText(item))
+    .filter(Boolean)
+    .sort()
+
+const listsMatch = (first: string[], second: string[]) =>
+  first.length === second.length && first.every((item, index) => item === second[index])
+
 export default function ClientModal({
   open,
   onClose,
@@ -214,40 +224,49 @@ export default function ClientModal({
         return
       }
 
+    const workEmailChanged = !clientData || normalizeText(clientData.work_email) !== normalizeText(normalizedForm.work_email)
+    const phoneNumbersChanged = !clientData || !listsMatch(normalizeList(clientData.phone_numbers), normalizeList(normalizedForm.phone_numbers))
+    const emailAddressesChanged = !clientData || !listsMatch(normalizeList(clientData.email_addresses), normalizeList(normalizedForm.email_addresses))
+    const shouldCheckDuplicates = workEmailChanged || phoneNumbersChanged || emailAddressesChanged
+    const currentClientId = clientData?.id ? String(clientData.id) : null
+
     const duplicateChecks = []
 
-    if (normalizedForm.work_email) {
-      duplicateChecks.push(
-        supabase
-          .from('clients')
-          .select('id, client_name, phone_numbers, email_addresses, work_email')
-          .ilike('work_email', normalizedForm.work_email)
-      )
+    if (shouldCheckDuplicates && normalizedForm.work_email) {
+      let query = supabase
+        .from('clients')
+        .select('id, client_name, phone_numbers, email_addresses, work_email')
+
+      if (currentClientId) query = query.neq('id', currentClientId)
+
+      duplicateChecks.push(query.ilike('work_email', normalizedForm.work_email))
     }
 
-    if (phoneToCheck) {
-      duplicateChecks.push(
-        supabase
-          .from('clients')
-          .select('id, client_name, phone_numbers, email_addresses, work_email')
-          .contains('phone_numbers', [phoneToCheck])
-      )
+    if (shouldCheckDuplicates && phoneToCheck) {
+      let query = supabase
+        .from('clients')
+        .select('id, client_name, phone_numbers, email_addresses, work_email')
+
+      if (currentClientId) query = query.neq('id', currentClientId)
+
+      duplicateChecks.push(query.contains('phone_numbers', [phoneToCheck]))
     }
 
-    emailsToCheck.forEach((email) => {
-      duplicateChecks.push(
-        supabase
-          .from('clients')
-          .select('id, client_name, phone_numbers, email_addresses, work_email')
-          .contains('email_addresses', [email])
-      )
+    if (shouldCheckDuplicates) emailsToCheck.forEach((email) => {
+      let query = supabase
+        .from('clients')
+        .select('id, client_name, phone_numbers, email_addresses, work_email')
+
+      if (currentClientId) query = query.neq('id', currentClientId)
+
+      duplicateChecks.push(query.contains('email_addresses', [email]))
     })
 
     const duplicateResults = await Promise.all(duplicateChecks)
     const possibleDuplicates = duplicateResults.flatMap((result) => result.data || [])
 
     const duplicate = possibleDuplicates?.find((c: any) => {
-      if (clientData && c.id === clientData.id) return false
+      if (currentClientId && String(c.id) === currentClientId) return false
       return (
         (normalizedForm.work_email && c.work_email?.trim().toLowerCase() === normalizedForm.work_email.toLowerCase()) ||
         (phoneToCheck && c.phone_numbers?.includes(phoneToCheck)) ||
