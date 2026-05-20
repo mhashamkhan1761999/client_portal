@@ -204,7 +204,6 @@ export default function ClientModal({
         ? currentUser?.id || authData.user?.id || ''
         : ''
       const ownerId = form.assigned_to || fallbackOwnerId
-      const phoneToCheck = form.phone_numbers[0]?.trim()
       const emailsToCheck = form.email_addresses.map((email) => email.trim()).filter(Boolean)
       const normalizedForm = {
         ...form,
@@ -225,9 +224,8 @@ export default function ClientModal({
       }
 
     const workEmailChanged = !clientData || normalizeText(clientData.work_email) !== normalizeText(normalizedForm.work_email)
-    const phoneNumbersChanged = !clientData || !listsMatch(normalizeList(clientData.phone_numbers), normalizeList(normalizedForm.phone_numbers))
     const emailAddressesChanged = !clientData || !listsMatch(normalizeList(clientData.email_addresses), normalizeList(normalizedForm.email_addresses))
-    const shouldCheckDuplicates = workEmailChanged || phoneNumbersChanged || emailAddressesChanged
+    const shouldCheckDuplicates = workEmailChanged || emailAddressesChanged
     const currentClientId = clientData?.id ? String(clientData.id) : null
 
     const duplicateChecks = []
@@ -240,16 +238,6 @@ export default function ClientModal({
       if (currentClientId) query = query.neq('id', currentClientId)
 
       duplicateChecks.push(query.ilike('work_email', normalizedForm.work_email))
-    }
-
-    if (shouldCheckDuplicates && phoneToCheck) {
-      let query = supabase
-        .from('clients')
-        .select('id, client_name, phone_numbers, email_addresses, work_email')
-
-      if (currentClientId) query = query.neq('id', currentClientId)
-
-      duplicateChecks.push(query.contains('phone_numbers', [phoneToCheck]))
     }
 
     if (shouldCheckDuplicates) emailsToCheck.forEach((email) => {
@@ -269,7 +257,6 @@ export default function ClientModal({
       if (currentClientId && String(c.id) === currentClientId) return false
       return (
         (normalizedForm.work_email && c.work_email?.trim().toLowerCase() === normalizedForm.work_email.toLowerCase()) ||
-        (phoneToCheck && c.phone_numbers?.includes(phoneToCheck)) ||
         emailsToCheck.some((email) => c.email_addresses?.includes(email))
       )
     })
