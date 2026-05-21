@@ -225,8 +225,7 @@ export default function ClientModal({
 
     const workEmailChanged = !clientData || normalizeText(clientData.work_email) !== normalizeText(normalizedForm.work_email)
     const emailAddressesChanged = !clientData || !listsMatch(normalizeList(clientData.email_addresses), normalizeList(normalizedForm.email_addresses))
-    const shouldCheckDuplicates = workEmailChanged || emailAddressesChanged
-    const currentClientId = clientData?.id ? String(clientData.id) : null
+    const shouldCheckDuplicates = !clientData && (workEmailChanged || emailAddressesChanged)
 
     const duplicateChecks = []
 
@@ -234,8 +233,6 @@ export default function ClientModal({
       let query = supabase
         .from('clients')
         .select('id, client_name, phone_numbers, email_addresses, work_email')
-
-      if (currentClientId) query = query.neq('id', currentClientId)
 
       duplicateChecks.push(query.ilike('work_email', normalizedForm.work_email))
     }
@@ -245,8 +242,6 @@ export default function ClientModal({
         .from('clients')
         .select('id, client_name, phone_numbers, email_addresses, work_email')
 
-      if (currentClientId) query = query.neq('id', currentClientId)
-
       duplicateChecks.push(query.contains('email_addresses', [email]))
     })
 
@@ -254,7 +249,6 @@ export default function ClientModal({
     const possibleDuplicates = duplicateResults.flatMap((result) => result.data || [])
 
     const duplicate = possibleDuplicates?.find((c: any) => {
-      if (currentClientId && String(c.id) === currentClientId) return false
       return (
         (normalizedForm.work_email && c.work_email?.trim().toLowerCase() === normalizedForm.work_email.toLowerCase()) ||
         emailsToCheck.some((email) => c.email_addresses?.includes(email))
