@@ -1024,7 +1024,7 @@ export default function SingleClientPage() {
             fetchClientWithDetails()
           }}
           clientData={client}
-          currentUser="system_admin"
+          currentUser={user}
           isServiceEditable={false}
         />
 

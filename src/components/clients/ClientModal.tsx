@@ -68,6 +68,20 @@ const getChangedClientFields = (previous: any, next: any) => {
   return trackedFields.filter((field) => valueChanged(previous?.[field], next?.[field]))
 }
 
+const insertHistoryLog = async (payload: Record<string, any>) => {
+  const { error } = await supabase.from('status_logs').insert(payload)
+
+  if (!error) return null
+
+  const { error: fallbackError } = await supabase.from('status_logs').insert({
+    ...payload,
+    changed_by: null,
+    affected_user: null,
+  })
+
+  return fallbackError || error
+}
+
 export default function ClientModal({
   open,
   onClose,
@@ -324,7 +338,7 @@ export default function ClientModal({
           : authData.user?.id
 
       if (clientId && statusChanged) {
-        const { error: logError } = await supabase.from('status_logs').insert({
+        const logError = await insertHistoryLog({
           client_id: clientId,
           previous_status: clientData.status || null,
           new_status: normalizedForm.status || null,
@@ -336,12 +350,11 @@ export default function ClientModal({
 
         if (logError) {
           console.error('Failed to insert status log:', logError)
-          toast.error('Client updated, but status history failed to save.')
         }
       }
 
       if (clientId && changedFields.length > 0) {
-        const { error: editLogError } = await supabase.from('status_logs').insert({
+        const editLogError = await insertHistoryLog({
           client_id: clientId,
           previous_status: clientData.status || null,
           new_status: normalizedForm.status || null,
@@ -353,7 +366,6 @@ export default function ClientModal({
 
         if (editLogError) {
           console.error('Failed to insert client edit log:', editLogError)
-          toast.error('Client updated, but edit history failed to save.')
         }
       }
 
@@ -382,7 +394,7 @@ export default function ClientModal({
         })
       }
 
-      await supabase.from('status_logs').insert({
+      await insertHistoryLog({
         client_id: clientId,
         previous_status: null,
         new_status: normalizedForm.status || null,
