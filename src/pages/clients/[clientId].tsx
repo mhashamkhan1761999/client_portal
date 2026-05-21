@@ -19,6 +19,9 @@ import SalesLedger from '@/components/finance/SalesLedger'
 import AddSaleModal from '@/components/finance/AddSaleModal'
 
 
+const isUuid = (value?: string | null) =>
+  Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
+
 
 
 export default function SingleClientPage() {
@@ -145,7 +148,9 @@ export default function SingleClientPage() {
     let sudoName: string | null = null
     let leadAgentName: string | null = null
 
-    if (clientData.connecting_platform) {
+    if (clientData.connecting_platform === 'email') {
+      platformName = 'Email'
+    } else if (isUuid(clientData.connecting_platform)) {
       const { data: platformData } = await supabase
         .from('client_contact_channels')
         .select('platform')
@@ -254,7 +259,7 @@ export default function SingleClientPage() {
       'follow_up_deleted',
     ]
 
-    const { data: statusLogs } = await supabase
+    const { data: statusLogs, error: statusError } = await supabase
       .from('status_logs')
       .select('id, created_at, previous_status, new_status, changed_by, affected_user, action_type, note')
       .eq('client_id', id)
@@ -262,15 +267,19 @@ export default function SingleClientPage() {
       .order('created_at', { ascending: false })
       .limit(pageSize + 1)
 
-    const { data: leadTransfers, error } = await supabase
+    const { data: leadTransfers, error: transferError } = await supabase
       .from('lead_transfers')
       .select('id, created_at, from_user_id, to_user_id, transferred_by, transfer_type, reason, note, client_status_at_transfer, lead_nature')
       .eq('client_id', id)
       .order('created_at', { ascending: false })
       .limit(pageSize + 1)
 
-    if (error) {
-      console.error('Error fetching transfer history:', error.message)
+    if (statusError) {
+      console.error('Error fetching client activity history:', statusError.message)
+    }
+
+    if (transferError) {
+      console.error('Error fetching transfer history:', transferError.message)
     }
 
     const normalizedStatusLogs = (statusLogs || []).map((log: any) => ({
