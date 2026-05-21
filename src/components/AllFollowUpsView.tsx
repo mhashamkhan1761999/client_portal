@@ -164,6 +164,19 @@ const AllFollowUps: React.FC = () => {
       return notify('Failed to update follow-up!', { duration: 5000 });
     }
 
+    await supabase.from('status_logs').insert({
+      client_id: selectedFollowUp.client_id,
+      previous_status: null,
+      new_status: null,
+      changed_by: userId,
+      affected_user: selectedFollowUp.assigned_to || userId,
+      action_type: actionType === 'done' ? 'follow_up_completed' : 'follow_up_rescheduled',
+      note:
+        actionType === 'done'
+          ? `Completed follow-up${selectedFollowUp.last_note ? `. Comment: ${selectedFollowUp.last_note}` : ''}${reason.trim() ? `. Reason: ${reason.trim()}` : ''}`
+          : `Rescheduled follow-up to ${formatFollowUpTime(updateObj.reminder_date)}${selectedFollowUp.last_note ? `. Comment: ${selectedFollowUp.last_note}` : ''}${reason.trim() ? `. Reason: ${reason.trim()}` : ''}`,
+    });
+
     await fetchFollowUps();
     notify(
       actionType === 'done'

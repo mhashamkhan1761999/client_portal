@@ -51,6 +51,8 @@ export default function SingleClientPage() {
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   const [showFullDetails, setShowFullDetails] = useState(false)
   const [activeClientPanel, setActiveClientPanel] = useState<'people' | 'sales' | 'history' | 'followups' | 'notes'>('people')
+  const [historyLimit, setHistoryLimit] = useState(50)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
 
   type ClientFollowUp = {
     id: string
@@ -234,17 +236,38 @@ export default function SingleClientPage() {
     setAssignments((data || []) as ClientAssignment[])
   }
 
-  const fetchTransferLogs = async (id: string) => {
+  const fetchTransferLogs = async (id: string, limitOverride = historyLimit) => {
+    const pageSize = limitOverride
+    const activityTypes = [
+      'client_created',
+      'client_info_updated',
+      'client_transferred',
+      'status_changed',
+      'service_assigned',
+      'connected_person_added',
+      'connected_person_updated',
+      'connected_person_removed',
+      'follow_up_created',
+      'follow_up_updated',
+      'follow_up_completed',
+      'follow_up_rescheduled',
+      'follow_up_deleted',
+    ]
+
     const { data: statusLogs } = await supabase
       .from('status_logs')
       .select('id, created_at, previous_status, new_status, changed_by, affected_user, action_type, note')
       .eq('client_id', id)
-      .in('action_type', ['client_transferred', 'status_changed', 'service_assigned'])
+      .in('action_type', activityTypes)
+      .order('created_at', { ascending: false })
+      .limit(pageSize + 1)
 
     const { data: leadTransfers, error } = await supabase
       .from('lead_transfers')
       .select('id, created_at, from_user_id, to_user_id, transferred_by, transfer_type, reason, note, client_status_at_transfer, lead_nature')
       .eq('client_id', id)
+      .order('created_at', { ascending: false })
+      .limit(pageSize + 1)
 
     if (error) {
       console.error('Error fetching transfer history:', error.message)
@@ -269,9 +292,11 @@ export default function SingleClientPage() {
       note: transfer.note,
     }))
 
-    const logs = [...normalizedStatusLogs, ...normalizedTransfers].sort(
+    const allLogs = [...normalizedStatusLogs, ...normalizedTransfers].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
+    const logs = allLogs.slice(0, pageSize)
+    setHasMoreHistory(allLogs.length > pageSize)
 
     const userIds = Array.from(
       new Set(
@@ -304,11 +329,83 @@ export default function SingleClientPage() {
     )
   }
 
+  const logClientActivity = async ({
+    actionType,
+    note,
+    affectedUser,
+    previousStatus = client?.status || null,
+    newStatus = client?.status || null,
+  }: {
+    actionType: string
+    note: string
+    affectedUser?: string | null
+    previousStatus?: string | null
+    newStatus?: string | null
+  }) => {
+    if (!clientId || typeof clientId !== 'string') return
+
+    const { error } = await supabase.from('status_logs').insert({
+      client_id: clientId,
+      previous_status: previousStatus,
+      new_status: newStatus,
+      changed_by: user?.id || null,
+      affected_user: affectedUser || null,
+      action_type: actionType,
+      note,
+    })
+
+    if (error) console.error('Failed to write client activity:', error)
+  }
+
   const isConnectedUser = Boolean(user && assignments.some((assignment) => assignment.user_id === user.id))
   const canEditMainClient = Boolean(user && client && (user.role === 'admin' || client.assigned_to === user.id))
   const canWorkClient = Boolean(canEditMainClient || isConnectedUser)
   const nonAdminUsers = users.filter((item) => item.role !== 'admin')
   const connectedPersonUsers = users
+  const getTimelineTitle = (log: TransferLog) => {
+    const type = log.transfer_type || log.action_type || 'status_changed'
+    const labels: Record<string, string> = {
+      client_created: 'Client Added',
+      client_info_updated: 'Client Info Updated',
+      client_transferred: 'Lead Transferred',
+      transfer: 'Lead Transferred',
+      initial_assignment: 'Initial Assignment',
+      status_changed: 'Status Changed',
+      service_assigned: 'Service Assigned',
+      connected_person_added: 'Connected Person Added',
+      connected_person_updated: 'Connected Person Updated',
+      connected_person_removed: 'Connected Person Removed',
+      follow_up_created: 'Follow-Up Added',
+      follow_up_updated: 'Follow-Up Updated',
+      follow_up_completed: 'Follow-Up Completed',
+      follow_up_rescheduled: 'Follow-Up Rescheduled',
+      follow_up_deleted: 'Follow-Up Deleted',
+    }
+
+    return labels[type] || type.replace(/_/g, ' ')
+  }
+
+  const getTimelineMeta = (log: TransferLog) => {
+    const type = log.transfer_type || log.action_type || ''
+
+    if (type === 'transfer' || type === 'client_transferred' || type === 'initial_assignment') {
+      return `From ${log.from_user_name || '-'} to ${log.to_user_name || log.affected_user_name || '-'}`
+    }
+
+    if (type.startsWith('connected_person')) {
+      return `Person: ${log.affected_user_name || '-'} | By ${log.changed_by_name || '-'}`
+    }
+
+    if (type.startsWith('follow_up')) {
+      return `By ${log.changed_by_name || '-'}${log.affected_user_name && log.affected_user_name !== '-' ? ` | Assigned to ${log.affected_user_name}` : ''}`
+    }
+
+    if (type === 'status_changed') {
+      return `Changed by ${log.changed_by_name || '-'}`
+    }
+
+    return `By ${log.changed_by_name || '-'}${log.affected_user_name && log.affected_user_name !== '-' ? ` | Related to ${log.affected_user_name}` : ''}`
+  }
 
   const openAddAssignmentModal = () => {
     setEditingAssignmentId(null)
@@ -340,6 +437,12 @@ export default function SingleClientPage() {
       remarks: assignmentRemarks.trim() || null,
       lead_nature: client.lead_nature || null,
     }
+    const assignmentChanged =
+      !existing ||
+      existing.user_id !== assignmentUserId ||
+      existing.assignment_type !== resolvedAssignmentType ||
+      existing.status !== assignmentStatus ||
+      (existing.remarks || '').trim() !== (payload.remarks || '')
 
     const result = existing
       ? await supabase.from('client_assignments').update(payload).eq('id', existing.id)
@@ -349,6 +452,19 @@ export default function SingleClientPage() {
       console.error(result.error)
       toast.error('Failed to save connected person.')
     } else {
+      const person = users.find((item) => item.id === assignmentUserId)
+      const personName = person?.sudo_name || person?.name || 'Connected person'
+      const actionType = existing ? 'connected_person_updated' : 'connected_person_added'
+      const remarks = assignmentRemarks.trim()
+
+      if (assignmentChanged) {
+        await logClientActivity({
+          actionType,
+          affectedUser: assignmentUserId,
+          note: `${existing ? 'Updated' : 'Added'} connected person: ${personName}${remarks ? `. Comment: ${remarks}` : ''}`,
+        })
+      }
+
       toast.success('Connected person saved.')
       setShowAssignmentModal(false)
       setEditingAssignmentId(null)
@@ -357,6 +473,7 @@ export default function SingleClientPage() {
       setAssignmentStatus('connected')
       setAssignmentRemarks('')
       await fetchAssignments(clientId)
+      await fetchTransferLogs(clientId)
     }
 
     setAssignmentLoading(false)
@@ -386,7 +503,13 @@ export default function SingleClientPage() {
     }
 
     toast.success('Connected person removed.')
+    await logClientActivity({
+      actionType: 'connected_person_removed',
+      affectedUser: assignment.user_id,
+      note: `Removed connected person: ${personName}${assignment.remarks ? `. Previous comment: ${assignment.remarks}` : ''}`,
+    })
     await fetchAssignments(clientId)
+    await fetchTransferLogs(clientId)
   }
 
   const handleTransferLead = async () => {
@@ -816,33 +939,46 @@ export default function SingleClientPage() {
 
         {activeClientPanel === 'history' && (
         <div className="bg-[#2a2a2a] p-4 rounded-lg">
-          <h3 className="text-lg font-semibold mb-3 text-[#c29a4b]">Transfer / Status History</h3>
+          <h3 className="text-lg font-semibold mb-3 text-[#c29a4b]">Client Timeline</h3>
           {transferLogs.length === 0 ? (
-            <p className="text-sm text-gray-400">No transfer or status history yet.</p>
+            <p className="text-sm text-gray-400">No client history yet.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="relative space-y-4 border-l border-gray-700 pl-4">
               {transferLogs.map((log) => (
-                <div key={log.id} className="border border-gray-700 rounded p-3 text-sm">
+                <div key={`${log.transfer_type || log.action_type}-${log.id}`} className="relative rounded border border-gray-700 bg-[#1b1c1f] p-3 text-sm">
+                  <span className="absolute -left-[23px] top-4 h-3 w-3 rounded-full border border-[#c29a4b] bg-[#2a2a2a]" />
                   <div className="flex flex-wrap justify-between gap-2">
                     <span className="font-medium capitalize">
-                      {(log.transfer_type || log.action_type || 'status_changed').replace('_', ' ')}
+                      {getTimelineTitle(log)}
                     </span>
                     <span className="text-gray-400">{new Date(log.created_at).toLocaleString()}</span>
                   </div>
+                  {log.previous_status !== log.new_status && (log.previous_status || log.new_status) && (
                   <div className="mt-2 text-gray-300">
                     <span>{getClientStatusLabel(log.previous_status || '')}</span>
-                    <span className="mx-2">→</span>
+                    <span className="mx-2">to</span>
                     <span>{getClientStatusLabel(log.new_status || '')}</span>
                   </div>
+                  )}
                   <div className="mt-1 text-gray-400">
-                    {log.transfer_type === 'transfer' || log.transfer_type === 'initial_assignment'
-                      ? `From ${log.from_user_name || '-'} to ${log.to_user_name || log.affected_user_name || '-'}`
-                      : `Changed by ${log.changed_by_name || '-'}; transferred/assigned to ${log.affected_user_name || '-'}`}
+                    {getTimelineMeta(log)}
                   </div>
                   {log.reason && <div className="mt-1 text-gray-400">Reason: {getTransferReasonLabel(log.reason)}</div>}
                   {log.note && <div className="mt-1 text-gray-300">{log.note}</div>}
                 </div>
               ))}
+              {hasMoreHistory && (
+                <button
+                  className="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-500"
+                  onClick={async () => {
+                    const nextLimit = historyLimit + 50
+                    setHistoryLimit(nextLimit)
+                    await fetchTransferLogs(client.id, nextLimit)
+                  }}
+                >
+                  Load more history
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -855,7 +991,13 @@ export default function SingleClientPage() {
         <div className="bg-gray-800 p-4 rounded shadow">
           <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
           <div className="mt-4">
-            <FollowUpForm clientId={clientId} onSaved={fetchFollowUps} />
+            <FollowUpForm
+              clientId={clientId}
+              onSaved={() => {
+                fetchFollowUps()
+                fetchTransferLogs(clientId)
+              }}
+            />
           </div>
         </div>
       </div>

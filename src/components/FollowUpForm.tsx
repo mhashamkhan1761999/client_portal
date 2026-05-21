@@ -118,6 +118,20 @@ export default function FollowUpForm({
       return
     }
 
+    const activityNote = existingReminder?.id
+      ? `Updated follow-up for ${formatFollowUpTime(utcTime)}${note.trim() ? `. Comment: ${note.trim()}` : ''}`
+      : `Added follow-up for ${formatFollowUpTime(utcTime)}${note.trim() ? `. Comment: ${note.trim()}` : ''}`
+
+    await supabase.from('status_logs').insert({
+      client_id: clientId,
+      previous_status: null,
+      new_status: null,
+      changed_by: user.id,
+      affected_user: user.id,
+      action_type: existingReminder?.id ? 'follow_up_updated' : 'follow_up_created',
+      note: activityNote,
+    })
+
     toast.success(
       `Reminder saved for ${dayjs(reminderDate).format('MMM D, YYYY h:mm A')} ${getFollowUpTimeZoneLabel(reminderTimeZone)}`
     )

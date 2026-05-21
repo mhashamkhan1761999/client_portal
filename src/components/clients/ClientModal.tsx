@@ -35,6 +35,39 @@ const normalizeList = (value: unknown) =>
 const listsMatch = (first: string[], second: string[]) =>
   first.length === second.length && first.every((item, index) => item === second[index])
 
+const formatFieldLabel = (field: string) =>
+  field
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+
+const valueChanged = (previous: unknown, next: unknown) => {
+  if (Array.isArray(previous) || Array.isArray(next)) {
+    return !listsMatch(normalizeList(previous), normalizeList(next))
+  }
+
+  return normalizeText(previous) !== normalizeText(next)
+}
+
+const getChangedClientFields = (previous: any, next: any) => {
+  const trackedFields = [
+    'client_name',
+    'phone_numbers',
+    'email_addresses',
+    'work_email',
+    'website_url',
+    'gender',
+    'profile_url',
+    'platform',
+    'connecting_platform',
+    'lead_gen_id',
+    'lead_nature',
+    'secondary_phones',
+    'business_name',
+  ]
+
+  return trackedFields.filter((field) => valueChanged(previous?.[field], next?.[field]))
+}
+
 export default function ClientModal({
   open,
   onClose,
@@ -92,7 +125,7 @@ export default function ClientModal({
     fetchNumbers()
     fetchLeadGens()
 
-    if (clientData) {
+      if (clientData) {
       setForm({
         client_name: clientData.client_name || '',
         phone_numbers: clientData.phone_numbers || [''],
@@ -284,13 +317,13 @@ export default function ClientModal({
       clientId = updated?.id ?? null
 
       const statusChanged = clientData.status !== normalizedForm.status
+      const changedFields = getChangedClientFields(clientData, normalizedForm)
+      const changedBy =
+        currentUser && typeof currentUser === 'object' && currentUser.id
+          ? currentUser.id
+          : authData.user?.id
 
       if (clientId && statusChanged) {
-        const changedBy =
-          currentUser && typeof currentUser === 'object' && currentUser.id
-            ? currentUser.id
-            : authData.user?.id
-
         const { error: logError } = await supabase.from('status_logs').insert({
           client_id: clientId,
           previous_status: clientData.status || null,
@@ -304,6 +337,23 @@ export default function ClientModal({
         if (logError) {
           console.error('Failed to insert status log:', logError)
           toast.error('Client updated, but status history failed to save.')
+        }
+      }
+
+      if (clientId && changedFields.length > 0) {
+        const { error: editLogError } = await supabase.from('status_logs').insert({
+          client_id: clientId,
+          previous_status: clientData.status || null,
+          new_status: normalizedForm.status || null,
+          changed_by: changedBy || null,
+          affected_user: normalizedForm.assigned_to || null,
+          action_type: 'client_info_updated',
+          note: `Updated client info: ${changedFields.map(formatFieldLabel).join(', ')}`,
+        })
+
+        if (editLogError) {
+          console.error('Failed to insert client edit log:', editLogError)
+          toast.error('Client updated, but edit history failed to save.')
         }
       }
 
@@ -331,6 +381,16 @@ export default function ClientModal({
           lead_nature: normalizedForm.lead_nature || null,
         })
       }
+
+      await supabase.from('status_logs').insert({
+        client_id: clientId,
+        previous_status: null,
+        new_status: normalizedForm.status || null,
+        changed_by: authData.user?.id || normalizedForm.assigned_to || null,
+        affected_user: normalizedForm.assigned_to || null,
+        action_type: 'client_created',
+        note: 'Client added to portal',
+      })
 
       toast.success('Client added successfully')
     }
