@@ -51,6 +51,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     { name: 'Dashboard', path: '/dashboard' },
     { name: 'All Clients', path: '/all-clients' },
     { name: 'Services', path: '/services' },
+    { name: 'Portfolio', path: '/portfolio' },
     { name: 'Follow-Ups', path: '/follow-ups' }
     
   ]
