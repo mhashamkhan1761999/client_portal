@@ -7,7 +7,6 @@ import { Toaster } from 'sonner';
 import { AuthProvider } from '@/context/AuthContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import FollowUpNotifier from '@/components/FollowUpNotifier';
-import TabInactivityRefresh from '@/components/TabInactivityRefresh';
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   const [supabaseClient] = useState(() => createPagesBrowserClient());
@@ -21,7 +20,6 @@ export default function MyApp({ Component, pageProps }: AppProps) {
         <NotificationProvider>
         <AuthProvider>
           <Toaster position="top-right" richColors closeButton />
-          <TabInactivityRefresh />
           <FollowUpNotifier />
           <Component {...pageProps} />
         </AuthProvider>

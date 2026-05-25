@@ -89,6 +89,7 @@ const socialIcon = (platform: string) => {
 
 export default function PortfolioManagerPage() {
   const { user, loading: authLoading } = useAuth()
+  const userId = user?.id
   const router = useRouter()
   const [profiles, setProfiles] = useState<PortfolioProfile[]>([])
   const [profile, setProfile] = useState<PortfolioProfile | null>(null)
@@ -113,13 +114,13 @@ export default function PortfolioManagerPage() {
   )
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !userId) {
       router.push('/login')
       return
     }
-    if (!user) return
+    if (!userId) return
     fetchProfiles()
-  }, [authLoading, router, user])
+  }, [authLoading, router, userId])
 
   const fetchProfiles = async (selectedId?: string) => {
     if (!user) return
