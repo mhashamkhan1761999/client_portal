@@ -7,6 +7,7 @@ import Layout from '@/components/layout/Layout'
 import supabase from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 import { CLIENT_STATUSES, getClientStatusLabel } from '@/lib/clientStatus'
+import { LEAD_NATURE_OPTIONS, getLeadNatureLabel, parseLeadNatureValues } from '@/lib/leadNature'
 
 type Client = {
   id: string
@@ -14,6 +15,7 @@ type Client = {
   phone_numbers?: string[]
   email_addresses?: string[]
   status?: string
+  lead_nature?: string | string[] | null
   assigned_to?: string
   created_at: string
   follow_ups?: {
@@ -67,6 +69,11 @@ const matchesStatusFilter = (clientStatus: string | undefined, filter: string) =
   return allowed.includes(clientStatus || '')
 }
 
+const matchesLeadNatureFilter = (clientLeadNature: string | string[] | null | undefined, filter: string) => {
+  if (filter === 'all') return true
+  return parseLeadNatureValues(clientLeadNature).includes(filter)
+}
+
 const hasPendingFollowUp = (client: Client) =>
   client.follow_ups?.some((followUp) => !followUp.is_completed) || false
 
@@ -79,6 +86,7 @@ export default function AllClientsPage() {
   const [loading, setLoading] = useState(false)
   const [sortOption, setSortOption] = useState('created_desc')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [leadNatureFilter, setLeadNatureFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -144,16 +152,20 @@ export default function AllClientsPage() {
       } else if (!matchesStatusFilter(client.status, statusFilter)) {
         return false
       }
+      if (!matchesLeadNatureFilter(client.lead_nature, leadNatureFilter)) return false
+
       const sellerName = getSellerName(client).toLowerCase()
+      const leadNatureLabel = getLeadNatureLabel(client.lead_nature).toLowerCase()
       return (
         client.client_name?.toLowerCase().includes(search) ||
         client.email_addresses?.some((email) => email.toLowerCase().includes(search)) ||
         client.phone_numbers?.some((phone) => phone.includes(search)) ||
         client.status?.toLowerCase().includes(search) ||
+        leadNatureLabel.includes(search) ||
         sellerName.includes(search)
       )
     })
-  }, [clients, searchTerm, statusFilter])
+  }, [clients, leadNatureFilter, searchTerm, statusFilter])
 
   const paginatedClients = filteredClients.slice(
     (currentPage - 1) * clientsPerPage,
@@ -201,16 +213,32 @@ export default function AllClientsPage() {
             ))}
           </div>
 
-          <select
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value)}
-            className="rounded border border-slate-700 bg-[#101113] px-3 py-1 text-white"
-          >
-            <option value="created_desc">Newest First</option>
-            <option value="created_asc">Oldest First</option>
-            <option value="name_asc">Name A-Z</option>
-            <option value="name_desc">Name Z-A</option>
-          </select>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={leadNatureFilter}
+              onChange={(e) => {
+                setCurrentPage(1)
+                setLeadNatureFilter(e.target.value)
+              }}
+              className="rounded border border-slate-700 bg-[#101113] px-3 py-1 text-white"
+            >
+              <option value="all">All lead nature</option>
+              {LEAD_NATURE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="rounded border border-slate-700 bg-[#101113] px-3 py-1 text-white"
+            >
+              <option value="created_desc">Newest First</option>
+              <option value="created_asc">Oldest First</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+            </select>
+          </div>
         </div>
 
         {loading ? (
@@ -226,6 +254,7 @@ export default function AllClientsPage() {
                   <th className="px-4 py-3">Email Address</th>
                   <th className="px-4 py-3">Seller</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Lead Nature</th>
                   <th className="px-4 py-3">Created At</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
@@ -239,6 +268,7 @@ export default function AllClientsPage() {
                     <td className="px-4 py-3">{client.email_addresses?.join(', ') || '-'}</td>
                     <td className="px-4 py-3 font-medium text-slate-200">{getSellerName(client)}</td>
                     <td className="px-4 py-3">{getStatusBadge(client.status)}</td>
+                    <td className="px-4 py-3">{getLeadNatureLabel(client.lead_nature)}</td>
                     <td className="px-4 py-3">{formatDate(client.created_at)}</td>
                     <td className="px-4 py-3">
                       <Link href={`/clients/${client.id}`} className="rounded bg-sky-600 px-3 py-1 text-xs text-white hover:bg-sky-500">
