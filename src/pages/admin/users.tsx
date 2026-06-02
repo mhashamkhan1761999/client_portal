@@ -68,7 +68,7 @@ export default function AdminUserManagement() {
     fetchChannels()
     fetchLeadGens();
     checkAdmin()
-  }, [activeTab])
+  }, [])
 
   const checkAdmin = async () => {
     const { data: session, error: sessionError } = await supabase.auth.getSession()
@@ -256,8 +256,7 @@ export default function AdminUserManagement() {
           </div>
 
          {/* Tab Content */}
-          {activeTab === 'user' && (
-            <>
+          <div className={activeTab === 'user' ? 'block' : 'hidden'}>
               {/* Create User Form */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#2a2a2a] p-6 rounded-xl shadow-md mb-10">
                 {['name', 'sudo_name', 'email', 'work_email'].map((field) => (
@@ -408,10 +407,9 @@ export default function AdminUserManagement() {
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
+          </div>
 
-          {activeTab === 'teamlead' && (
+          <div className={activeTab === 'teamlead' ? 'block' : 'hidden'}>
             <div className="bg-[#2a2a2a] p-6 rounded-xl shadow-md mb-10">
               <h2 className="text-xl font-bold mb-4">📞 Client Contact Channels</h2>
               <p className="text-gray-400 mb-4">Manage client contact channels (Zoom, 3CX, Dialpad, 8X8).</p>
@@ -534,10 +532,10 @@ export default function AdminUserManagement() {
                 </div>
 
             </div>
-          )}
+          </div>
 
           {/* ✅ Lead Gen Members Tab */}
-          {activeTab === "numbers" && (
+          <div className={activeTab === "numbers" ? 'block' : 'hidden'}>
             <div className="bg-[#2a2a2a] p-6 rounded-xl shadow-md mb-10">
               <h2 className="text-xl font-bold mb-4">
                 👨‍💼 Add Lead Generation Members
@@ -605,7 +603,7 @@ export default function AdminUserManagement() {
                 ))}
               </ul>
             </div>
-          )}
+          </div>
 
 
         </div>

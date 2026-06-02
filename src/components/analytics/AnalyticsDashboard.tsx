@@ -34,12 +34,47 @@ type TransferStat = {
 type LeadGenStat = {
   id: string;
   name: string;
+  total: number;
   connected: number;
   converted: number;
   byNature: Record<string, { connected: number; converted: number; total: number }>;
 };
 
-const now = new Date();
+type AnalyticsFilter = "current_month" | "last_month" | "quarter" | "year" | "all";
+const toDateInput = (date: Date) => date.toISOString().slice(0, 10);
+
+const getFilterRange = (filter: AnalyticsFilter) => {
+  const now = new Date();
+  if (filter === "all") return { start: "", end: "" };
+  if (filter === "last_month") {
+    return {
+      start: toDateInput(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+    };
+  }
+  if (filter === "quarter") {
+    return {
+      start: toDateInput(new Date(now.getFullYear(), now.getMonth() - 3, 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+    };
+  }
+  if (filter === "year") {
+    return {
+      start: toDateInput(new Date(now.getFullYear() - 1, now.getMonth(), 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+    };
+  }
+  return {
+    start: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+  };
+};
+
+const applyRange = (query: any, column: string, filter: AnalyticsFilter) => {
+  if (filter === "all") return query;
+  const range = getFilterRange(filter);
+  return query.gte(column, range.start).lt(column, range.end);
+};
 
 export default function AnalyticsDashboard({ currentUser }: { currentUser: any }) {
   const [userStats, setUserStats] = useState<UserStat[]>([]);
@@ -51,7 +86,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
   const [reportView, setReportView] = useState<"team" | "transfers" | "leadgen">("team");
 
   // Filter state (example: "month" | "quarter" | "year")
-  const [filter, setFilter] = useState<"month" | "quarter" | "year">("month");
+  const [filter, setFilter] = useState<AnalyticsFilter>("current_month");
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -63,7 +98,10 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
       .eq("id", currentUser)
       .single();
 
-    if (!currentUserData) return;
+    if (!currentUserData) {
+      setLoading(false);
+      return;
+    }
 
     const isAdmin = currentUserData.role === "admin";
 
@@ -87,46 +125,60 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     const stats: UserStat[] = [];
     let allClientsCount = 0;
     let totalSalesCount = 0;
+    const currentNow = new Date();
 
     const { data: allTransfers } = await supabase
       .from("lead_transfers")
       .select("from_user_id, to_user_id, transfer_type");
 
-    const { data: allClientsForLeadGen } = await supabase
+    const { data: allClientsForLeadGen } = await applyRange(
+      supabase
       .from("clients")
-      .select("id, status, lead_gen_id, lead_nature");
+        .select("id, status, lead_gen_id, lead_nature, created_at"),
+      "created_at",
+      filter
+    );
 
     for (const user of users) {
       if (!isAdmin && user.id !== currentUser) continue; // Filter for normal users
 
       // Fetch clients for user
-      const { data: clients } = await supabase
+      const { data: clients } = await applyRange(
+        supabase
         .from("clients")
         .select("*")
-        .eq("assigned_to", user.id);
+          .eq("assigned_to", user.id),
+        "created_at",
+        filter
+      );
 
-      const totalClientsForUser = clients?.length || 0;
+      const userClients = (clients || []) as any[];
+      const totalClientsForUser = userClients.length;
       allClientsCount += totalClientsForUser;
 
       // Status counts
-      const converted = clients?.filter(c => c.status === "converted").length || 0;
-      const connected = clients?.filter(c => c.status === "connected").length || 0;
-      const drop = clients?.filter(c => c.status === "drop").length || 0;
-      const inProgress = clients?.filter(c => c.status === "interested" || c.status === "in_progress").length || 0;
-      const notResponding = clients?.filter(c => c.status === "not_responding" || c.status === "unresponsive").length || 0;
+      const converted = userClients.filter((c: any) => c.status === "converted").length;
+      const connected = userClients.filter((c: any) => c.status === "connected").length;
+      const drop = userClients.filter((c: any) => c.status === "drop").length;
+      const inProgress = userClients.filter((c: any) => c.status === "interested" || c.status === "in_progress").length;
+      const notResponding = userClients.filter((c: any) => c.status === "not_responding" || c.status === "unresponsive").length;
 
       // Sales
-      const { data: salesData } = await supabase
+      const { data: salesData } = await applyRange(
+        supabase
         .from("client_service_sales")
-        .select("sold_price")
-        .eq("created_by", user.id);
+          .select("sold_price, created_at")
+          .eq("created_by", user.id),
+        "created_at",
+        filter
+      );
 
-      const totalSales = salesData?.reduce((acc, s) => acc + (s.sold_price || 0), 0) || 0;
+      const totalSales = ((salesData || []) as any[]).reduce((acc: number, s: any) => acc + Number(s.sold_price || 0), 0);
       totalSalesCount += totalSales;
 
       // Lead Gen Clients
       const leadGenClients: { [agentName: string]: number } = {};
-      clients?.forEach(c => {
+      userClients.forEach((c: any) => {
         if (c.lead_gen_id) {
           const name = leadAgentMap[c.lead_gen_id];
           if (name) leadGenClients[name] = (leadGenClients[name] || 0) + 1;
@@ -134,14 +186,19 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
       });
 
       // Follow-ups
-      const { data: followUps } = await supabase
+      const { data: followUps } = await applyRange(
+        supabase
         .from("follow_ups")
         .select("*")
-        .eq("user_id", user.id);
+          .eq("user_id", user.id),
+        "reminder_date",
+        filter
+      );
 
-        const followUpsCompleted = followUps?.filter(f => f.is_completed).length || 0;
-        const followUpsMissed = followUps?.filter(f => !f.is_completed && new Date(f.reminder_date) < now).length || 0;
-        const followUpsUpcoming = followUps?.filter(f => !f.is_completed && new Date(f.reminder_date) >= now).length || 0;
+        const userFollowUps = (followUps || []) as any[];
+        const followUpsCompleted = userFollowUps.filter((f: any) => f.is_completed).length;
+        const followUpsMissed = userFollowUps.filter((f: any) => !f.is_completed && new Date(f.reminder_date) < currentNow).length;
+        const followUpsUpcoming = userFollowUps.filter((f: any) => !f.is_completed && new Date(f.reminder_date) >= currentNow).length;
 
       stats.push({
         id: user.id,
@@ -203,11 +260,12 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
         return {
           id: agent.id,
           name: agent.name,
+          total: leadClients.length,
           connected: leadClients.filter((client: any) => client.status === "connected" || client.status === "converted").length,
           converted: leadClients.filter((client: any) => client.status === "converted").length,
           byNature,
         };
-      })
+      }).sort((a, b) => b.converted - a.converted || b.connected - a.connected || b.total - a.total)
     );
 
     setLoading(false);
@@ -227,19 +285,29 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     return () => {
         supabase.removeChannel(channel);
     };
-    }, [filter]);
+    }, [filter, currentUser]);
 
   if (loading) return <div>Loading analytics...</div>;
+  const bestLeadGen = leadGenStats[0];
+  const connectedClients = userStats.reduce((sum, item) => sum + item.connected + item.converted, 0);
+  const convertedClients = userStats.reduce((sum, item) => sum + item.converted, 0);
+  const droppedClients = userStats.reduce((sum, item) => sum + item.drop, 0);
 
   return (
     <div className="space-y-5">
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <button
-          className={`px-4 py-2 rounded ${filter === "month" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
-          onClick={() => setFilter("month")}
+          className={`px-4 py-2 rounded ${filter === "current_month" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
+          onClick={() => setFilter("current_month")}
         >
-          1 Month
+          Current Month
+        </button>
+        <button
+          className={`px-4 py-2 rounded ${filter === "last_month" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
+          onClick={() => setFilter("last_month")}
+        >
+          Last Month
         </button>
         <button
           className={`px-4 py-2 rounded ${filter === "quarter" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
@@ -253,7 +321,25 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
         >
           Year
         </button>
+        <button
+          className={`px-4 py-2 rounded ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-200"}`}
+          onClick={() => setFilter("all")}
+        >
+          All Dates
+        </button>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="Connected Clients" count={connectedClients} color="bg-cyan-600" />
+        <StatCard label="Converted Clients" count={convertedClients} color="bg-green-600" />
+        <StatCard label="Dropped Clients" count={droppedClients} color="bg-red-700" />
+        <StatCard label="Best Lead Gen" count={bestLeadGen ? bestLeadGen.converted || bestLeadGen.connected || bestLeadGen.total : 0} color="bg-amber-600" />
+      </div>
+      {bestLeadGen && (
+        <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-4 text-sm text-amber-100">
+          Best lead generator: <span className="font-semibold">{bestLeadGen.name}</span> with {bestLeadGen.total} leads, {bestLeadGen.connected} connected, and {bestLeadGen.converted} converted in this period.
+        </div>
+      )}
 
       {/* Total Stats */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -283,10 +369,11 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
         ))}
       </div>
 
-      {reportView === "team" && <UserStatsTable stats={userStats} />}
+      <div className={reportView === "team" ? "block" : "hidden"}>
+        <UserStatsTable stats={userStats} />
+      </div>
 
-      {reportView === "transfers" && (
-      <div className="space-y-4">
+      <div className={`${reportView === "transfers" ? "block" : "hidden"} space-y-4`}>
         <h2 className="text-xl font-semibold">Transfer Report</h2>
         {transferStats.map((item) => (
           <div key={item.userId} className="rounded-lg border border-slate-800 bg-gray-900 p-4">
@@ -305,10 +392,8 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
           </div>
         ))}
       </div>
-      )}
 
-      {reportView === "leadgen" && (
-      <div className="space-y-4">
+      <div className={`${reportView === "leadgen" ? "block" : "hidden"} space-y-4`}>
         <h2 className="text-xl font-semibold">Lead Gen Performance</h2>
         {leadGenStats.map((agent) => (
           <div key={agent.id} className="rounded-lg border border-slate-800 bg-gray-900 p-4">
@@ -332,7 +417,6 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
           </div>
         ))}
       </div>
-      )}
     </div>
   );
 }

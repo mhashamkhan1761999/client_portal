@@ -11,7 +11,40 @@ import { useAuth } from '@/context/AuthContext'
 import { CLIENT_STATUSES, getClientStatusLabel } from '@/lib/clientStatus'
 
 type DashboardPanel = 'analytics' | 'followups' | 'recent' | 'clients' | 'dropped'
+type DashboardPeriod = 'current_month' | 'last_month' | 'last_quarter' | 'last_year' | 'custom' | 'all'
 const toDateInput = (date: Date) => date.toISOString().slice(0, 10)
+
+const getPeriodRange = (period: DashboardPeriod, customStart: string, customEnd: string) => {
+  const now = new Date()
+  if (period === 'all') return { start: '', end: '', inclusiveEnd: false }
+  if (period === 'custom') return { start: customStart, end: customEnd, inclusiveEnd: true }
+  if (period === 'last_month') {
+    return {
+      start: toDateInput(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+      inclusiveEnd: false,
+    }
+  }
+  if (period === 'last_quarter') {
+    return {
+      start: toDateInput(new Date(now.getFullYear(), now.getMonth() - 3, 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+      inclusiveEnd: false,
+    }
+  }
+  if (period === 'last_year') {
+    return {
+      start: toDateInput(new Date(now.getFullYear() - 1, now.getMonth(), 1)),
+      end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+      inclusiveEnd: false,
+    }
+  }
+  return {
+    start: toDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end: toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1)),
+    inclusiveEnd: false,
+  }
+}
 
 export default function Dashboard() {
   const [clients, setClients] = useState<any[]>([])
@@ -19,9 +52,9 @@ export default function Dashboard() {
   const [session, setSession] = useState<Session | null>(null)
   const [openPanel, setOpenPanel] = useState<DashboardPanel>('recent')
   const [salesTotal, setSalesTotal] = useState(0)
-  const [salesPeriod, setSalesPeriod] = useState('current_month')
-  const [salesStart, setSalesStart] = useState(toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
-  const [salesEnd, setSalesEnd] = useState(toDateInput(new Date()))
+  const [dashboardPeriod, setDashboardPeriod] = useState<DashboardPeriod>('current_month')
+  const [customStart, setCustomStart] = useState(toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
+  const [customEnd, setCustomEnd] = useState(toDateInput(new Date()))
   const router = useRouter()
   const { user } = useAuth()
 
@@ -59,6 +92,12 @@ export default function Dashboard() {
         .select('*')
         .order('created_at', { ascending: false })
 
+      const range = getPeriodRange(dashboardPeriod, customStart, customEnd)
+      if (dashboardPeriod !== 'all') {
+        query = query.gte('created_at', range.start)
+        query = range.inclusiveEnd ? query.lte('created_at', range.end) : query.lt('created_at', range.end)
+      }
+
       if (user.role !== 'admin') {
         query = visibleClientIds.length > 0
           ? query.or(`assigned_to.eq.${user.id},id.in.(${visibleClientIds.join(',')})`)
@@ -70,35 +109,21 @@ export default function Dashboard() {
     }
 
     fetchClients()
-  }, [user])
+  }, [customEnd, customStart, dashboardPeriod, user])
 
   useEffect(() => {
     if (!user) return
 
     const fetchSalesTotal = async () => {
-      const now = new Date()
-      const start =
-        salesPeriod === 'last_quarter'
-          ? toDateInput(new Date(now.getFullYear(), now.getMonth() - 3, 1))
-          : salesPeriod === 'last_year'
-            ? toDateInput(new Date(now.getFullYear() - 1, now.getMonth(), 1))
-            : salesPeriod === 'custom'
-              ? salesStart
-              : toDateInput(new Date(now.getFullYear(), now.getMonth(), 1))
-      const end =
-        salesPeriod === 'custom'
-          ? salesEnd
-          : salesPeriod === 'all'
-            ? ''
-            : toDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 1))
+      const range = getPeriodRange(dashboardPeriod, customStart, customEnd)
 
       let query = supabase
         .from('client_sales')
         .select('total_amount, seller_user_id, sale_date')
 
-      if (salesPeriod !== 'all') {
-        query = query.gte('sale_date', start)
-        query = salesPeriod === 'custom' ? query.lte('sale_date', end) : query.lt('sale_date', end)
+      if (dashboardPeriod !== 'all') {
+        query = query.gte('sale_date', range.start)
+        query = range.inclusiveEnd ? query.lte('sale_date', range.end) : query.lt('sale_date', range.end)
       }
 
       if (user.role !== 'admin') {
@@ -116,7 +141,7 @@ export default function Dashboard() {
     }
 
     fetchSalesTotal()
-  }, [salesEnd, salesPeriod, salesStart, user])
+  }, [customEnd, customStart, dashboardPeriod, user])
 
   const visibleClients = user ? clients : []
 
@@ -183,23 +208,24 @@ export default function Dashboard() {
 
       <div className="mb-5 flex flex-wrap items-end gap-2 rounded-lg border border-slate-800 bg-[#111214] p-3">
         <label className="text-sm text-slate-300">
-          Sales period
+          Dashboard period
           <select
             className="mt-1 block rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white"
-            value={salesPeriod}
-            onChange={(event) => setSalesPeriod(event.target.value)}
+            value={dashboardPeriod}
+            onChange={(event) => setDashboardPeriod(event.target.value as DashboardPeriod)}
           >
             <option value="current_month">Current month</option>
+            <option value="last_month">Last month</option>
             <option value="last_quarter">Last quarter</option>
             <option value="last_year">Last year</option>
             <option value="custom">Custom</option>
             <option value="all">All dates</option>
           </select>
         </label>
-        {salesPeriod === 'custom' && (
+        {dashboardPeriod === 'custom' && (
           <>
-            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={salesStart} onChange={(event) => setSalesStart(event.target.value)} />
-            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={salesEnd} onChange={(event) => setSalesEnd(event.target.value)} />
+            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+            <input className="rounded border border-slate-700 bg-[#0b0c0e] px-3 py-2 text-sm text-white" type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
           </>
         )}
       </div>
@@ -243,40 +269,40 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {openPanel === 'analytics' && <AnalyticsDashboard currentUser={user.id} />}
+      <div className={openPanel === 'analytics' ? 'block' : 'hidden'}>
+        <AnalyticsDashboard currentUser={user.id} />
+      </div>
 
-      {openPanel === 'followups' && (
-        <section className="rounded-lg border border-slate-800 bg-[#161719] p-4">
-          <h2 className="mb-4 text-xl font-semibold text-white">Upcoming Follow-ups</h2>
-          <UpcomingFollowUps />
-        </section>
-      )}
+      <section className={`${openPanel === 'followups' ? 'block' : 'hidden'} rounded-lg border border-slate-800 bg-[#161719] p-4`}>
+        <h2 className="mb-4 text-xl font-semibold text-white">Upcoming Follow-ups</h2>
+        <UpcomingFollowUps />
+      </section>
 
-      {openPanel === 'recent' && (
-        <section className="rounded-lg border border-slate-800 bg-[#161719] p-4">
-          <h2 className="mb-4 text-xl font-semibold text-white">Recently Added Clients</h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {recentClients.map((client) => (
-              <button
-                key={client.id}
-                className="rounded border border-[#2a2a2a] bg-[#1f1f1f] p-4 text-left hover:border-slate-600"
-                onClick={() => router.push(`/clients/${client.id}`)}
-              >
-                <div className="font-semibold text-[#c29a4b]">{client.client_name}</div>
-                <div className="mt-2 text-sm text-gray-300">{getClientStatusLabel(client.status)}</div>
-                <div className="text-xs text-gray-500">
-                  {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'No date'}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className={`${openPanel === 'recent' ? 'block' : 'hidden'} rounded-lg border border-slate-800 bg-[#161719] p-4`}>
+        <h2 className="mb-4 text-xl font-semibold text-white">Recently Added Clients</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {recentClients.map((client) => (
+            <button
+              key={client.id}
+              className="rounded border border-[#2a2a2a] bg-[#1f1f1f] p-4 text-left hover:border-slate-600"
+              onClick={() => router.push(`/clients/${client.id}`)}
+            >
+              <div className="font-semibold text-[#c29a4b]">{client.client_name}</div>
+              <div className="mt-2 text-sm text-gray-300">{getClientStatusLabel(client.status)}</div>
+              <div className="text-xs text-gray-500">
+                {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'No date'}
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
 
-      {openPanel === 'clients' && <ClientTable />}
+      <div className={openPanel === 'clients' ? 'block' : 'hidden'}>
+        <ClientTable />
+      </div>
 
-      {openPanel === 'dropped' && user.role === 'admin' && (
-        <section className="rounded-lg border border-slate-800 bg-[#161719] p-4">
+      {user.role === 'admin' && (
+        <section className={`${openPanel === 'dropped' ? 'block' : 'hidden'} rounded-lg border border-slate-800 bg-[#161719] p-4`}>
           <h2 className="mb-4 text-xl font-semibold text-white">Dropped Clients</h2>
           {droppedClients.length === 0 ? (
             <p className="text-sm text-slate-400">No dropped clients.</p>
