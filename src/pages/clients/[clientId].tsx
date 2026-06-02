@@ -870,8 +870,7 @@ export default function SingleClientPage() {
           ))}
         </div>
 
-        {activeClientPanel === 'people' && (
-        <div className="bg-[#202124] p-4 rounded-lg border border-gray-800">
+        <div className={`${activeClientPanel === 'people' ? 'block' : 'hidden'} bg-[#202124] p-4 rounded-lg border border-gray-800`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-[#c29a4b]">Connected People</h3>
             {canEditMainClient && (
@@ -938,16 +937,12 @@ export default function SingleClientPage() {
             </div>
           )}
         </div>
-        )}
 
-        {activeClientPanel === 'sales' && (
-          <div className="mt-6">
+          <div className={`${activeClientPanel === 'sales' ? 'block' : 'hidden'} mt-6`}>
             <SalesLedger clientId={clientId} clientName={client.client_name} />
           </div>
-        )}
 
-        {activeClientPanel === 'history' && (
-        <div className="bg-[#2a2a2a] p-4 rounded-lg">
+        <div className={`${activeClientPanel === 'history' ? 'block' : 'hidden'} bg-[#2a2a2a] p-4 rounded-lg`}>
           <h3 className="text-lg font-semibold mb-3 text-[#c29a4b]">Client Timeline</h3>
           {transferLogs.length === 0 ? (
             <p className="text-sm text-gray-400">No client history yet.</p>
@@ -992,10 +987,7 @@ export default function SingleClientPage() {
           )}
         </div>
 
-        )}
-
-      {activeClientPanel === 'followups' && (
-      <div className="mt-6">
+      <div className={`${activeClientPanel === 'followups' ? 'block' : 'hidden'} mt-6`}>
         {/* Follow-up Reminders */}
         <div className="bg-gray-800 p-4 rounded shadow">
           <h3 className="text-lg font-semibold mb-2">🔔 Follow-up Reminders</h3>
@@ -1010,16 +1002,13 @@ export default function SingleClientPage() {
           </div>
         </div>
       </div>
-      )}
 
-      {activeClientPanel === 'notes' && (
-      <div className="mt-6">
+      <div className={`${activeClientPanel === 'notes' ? 'block' : 'hidden'} mt-6`}>
         {/* Notes / Assets Section */}
         <div className="bg-gray-800 p-4 rounded shadow">
           <ClientNotes clientId={client.id} currentUser="system_admin" />
         </div>
       </div>
-      )}
 
 
 

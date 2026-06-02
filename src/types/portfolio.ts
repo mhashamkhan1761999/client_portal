@@ -14,6 +14,11 @@ export type PortfolioProfile = {
   is_published: boolean
   created_at?: string
   updated_at?: string
+  users?: {
+    name?: string
+    sudo_name?: string
+    role?: string
+  } | null
 }
 
 export type PortfolioStat = {

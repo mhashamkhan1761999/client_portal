@@ -127,11 +127,16 @@ export default function PortfolioManagerPage() {
     setLoading(true)
     setError('')
 
-    const { data, error: profileError } = await supabase
+    let profileQuery = supabase
       .from('portfolio_profiles')
-      .select('*')
-      .eq('user_id', user.id)
+      .select('*, users:user_id(name, sudo_name, role)')
       .order('created_at', { ascending: true })
+
+    if (user.role !== 'admin') {
+      profileQuery = profileQuery.eq('user_id', user.id)
+    }
+
+    const { data, error: profileError } = await profileQuery
 
     if (profileError) {
       setError('Portfolio tables are not ready yet. Run the updated supabase-portfolio.sql file first.')
@@ -275,7 +280,7 @@ export default function PortfolioManagerPage() {
     setSavingProfile(true)
 
     const payload = {
-      user_id: user.id,
+      user_id: profile.id ? profile.user_id : user.id,
       slug: makeSlug(profile.slug || profile.display_name),
       display_name: profile.display_name,
       headline: profile.headline,
@@ -450,6 +455,11 @@ export default function PortfolioManagerPage() {
                 className={`rounded border px-4 py-2 text-sm transition ${profile.id === item.id ? 'border-[#c29a4b] bg-[#c29a4b]/15 text-[#f0d28a]' : 'border-slate-700 bg-[#161719] text-slate-300 hover:border-slate-500'}`}
               >
                 {item.display_name}
+                {user?.role === 'admin' && item.users && (
+                  <span className="ml-2 text-xs text-slate-400">
+                    {item.users.sudo_name || item.users.name || 'Owner'}
+                  </span>
+                )}
               </button>
             ))}
             {profiles.length === 0 && <span className="text-sm text-slate-400">Save the first portfolio to create your first sudo.</span>}
@@ -473,8 +483,7 @@ export default function PortfolioManagerPage() {
           ))}
         </div>
 
-        {builderTab !== 'cases' && (
-          <section className="rounded-lg border border-slate-800 bg-[#161719] p-5">
+        <section className={`${builderTab !== 'cases' ? 'block' : 'hidden'} rounded-lg border border-slate-800 bg-[#161719] p-5`}>
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-semibold">{builderTab === 'profile' ? 'Portfolio Information' : builderTab === 'contact' ? 'Contact & Social Links' : 'Visible Tabs & Stats'}</h2>
@@ -486,8 +495,7 @@ export default function PortfolioManagerPage() {
               </button>
             </div>
 
-            {builderTab === 'profile' && (
-              <div className="grid gap-4 lg:grid-cols-2">
+            <div className={`${builderTab === 'profile' ? 'grid' : 'hidden'} gap-4 lg:grid-cols-2`}>
                 <label className="block text-sm text-slate-300">
                   Sudo / display name
                   <input className="mt-1 w-full rounded border border-slate-700 bg-[#101113] px-3 py-2 text-white outline-none focus:border-[#c29a4b]" value={profile.display_name} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} />
@@ -509,10 +517,8 @@ export default function PortfolioManagerPage() {
                   Publish portfolio link
                 </label>
               </div>
-            )}
 
-            {builderTab === 'contact' && (
-              <div className="grid gap-5 lg:grid-cols-2">
+            <div className={`${builderTab === 'contact' ? 'grid' : 'hidden'} gap-5 lg:grid-cols-2`}>
                 <label className="block text-sm text-slate-300">
                   Personal phone number
                   <div className="mt-1 flex items-center rounded border border-slate-700 bg-[#101113] px-3 focus-within:border-[#c29a4b]">
@@ -548,10 +554,8 @@ export default function PortfolioManagerPage() {
                   </div>
                 </div>
               </div>
-            )}
 
-            {builderTab === 'sections' && (
-              <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <div className={`${builderTab === 'sections' ? 'grid' : 'hidden'} gap-6 xl:grid-cols-[1fr_1fr]`}>
                 <div>
                   <h3 className="mb-3 font-semibold text-white">Portfolio Tabs</h3>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -579,12 +583,9 @@ export default function PortfolioManagerPage() {
                   </div>
                 </div>
               </div>
-            )}
           </section>
-        )}
 
-        {builderTab === 'cases' && (
-          <section className="rounded-lg border border-slate-800 bg-[#111214] p-5">
+        <section className={`${builderTab === 'cases' ? 'block' : 'hidden'} rounded-lg border border-slate-800 bg-[#111214] p-5`}>
             <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Case Study Builder</h2>
@@ -710,7 +711,6 @@ export default function PortfolioManagerPage() {
               </div>
             </div>
           </section>
-        )}
       </div>
     </Layout>
   )

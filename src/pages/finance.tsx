@@ -52,8 +52,12 @@ export default function FinancePage() {
               ))}
             </div>
 
-            {activeTab === 'overview' && <FinanceAnalytics />}
-            {activeTab === 'ledger' && <SalesLedger />}
+            <div className={activeTab === 'overview' ? 'block' : 'hidden'}>
+              <FinanceAnalytics />
+            </div>
+            <div className={activeTab === 'ledger' ? 'block' : 'hidden'}>
+              <SalesLedger />
+            </div>
           </>
         )}
       </div>
