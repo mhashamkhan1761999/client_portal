@@ -49,7 +49,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('No app profile found for authenticated user:', id);
       setUser(null);
     } else {
-      setUser(dbUser as AuthUser);
+      setUser(prev => {
+        if (prev && prev.id === dbUser.id && prev.role === dbUser.role) {
+          return prev;
+        }
+        return dbUser as AuthUser;
+      });
     }
 
     if (showLoading) setLoading(false);
@@ -58,8 +63,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     fetchUser();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
-      fetchUser(false);
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        fetchUser(false);
+      }
     });
 
     return () => {

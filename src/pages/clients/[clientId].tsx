@@ -587,7 +587,7 @@ export default function SingleClientPage() {
     fetchClientWithDetails()
     if (clientId) fetchFollowUps()
 
-  }, [router.isReady, clientId, user])
+  }, [router.isReady, clientId, user?.id])
 
 
   if (!router.isReady || loading) {
