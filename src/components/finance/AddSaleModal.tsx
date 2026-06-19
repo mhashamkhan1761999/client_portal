@@ -63,7 +63,7 @@ export default function AddSaleModal({ isOpen, onClose, clientId, clientName, on
     setLoading(true)
     const soldItems = `Service: ${form.service_name.trim()}\nIncludes: ${form.service_includes.trim()}`
 
-    const { error } = await supabase.from('client_sales').insert({
+    const { data: insertedSale, error } = await supabase.from('client_sales').insert({
       client_id: clientId,
       sale_type: form.sale_type,
       seller_user_id: form.seller_user_id,
@@ -74,7 +74,7 @@ export default function AddSaleModal({ isOpen, onClose, clientId, clientName, on
       invoice_number: form.invoice_number.trim() || null,
       sale_date: form.sale_date,
       status: 'open',
-    })
+    }).select('id').single()
 
     setLoading(false)
 
@@ -83,6 +83,17 @@ export default function AddSaleModal({ isOpen, onClose, clientId, clientName, on
       toast.error('Failed to add sale.')
       return
     }
+
+    const seller = users.find((item) => item.id === form.seller_user_id)
+    await supabase.from('status_logs').insert({
+      client_id: clientId,
+      previous_status: null,
+      new_status: null,
+      changed_by: user.id,
+      affected_user: form.seller_user_id,
+      action_type: 'sale_added',
+      note: `Added sale: ${form.service_name.trim()} for $${Number(form.total_amount).toFixed(2)}${seller ? ` | Seller: ${seller.sudo_name || seller.name}` : ''}${form.invoice_number.trim() ? ` | Invoice: ${form.invoice_number.trim()}` : ''}`,
+    })
 
     toast.success('Sale added.')
     setForm({

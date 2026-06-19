@@ -22,6 +22,12 @@ import AddSaleModal from '@/components/finance/AddSaleModal'
 const isUuid = (value?: string | null) =>
   Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
 
+const CONNECTION_CHANNEL_LABELS: Record<string, string> = {
+  email: 'Email',
+  facebook: 'Facebook',
+  thread: 'Thread',
+}
+
 
 
 export default function SingleClientPage() {
@@ -97,6 +103,7 @@ export default function SingleClientPage() {
   }
 
   const getPlatformLabel = (id: string | undefined) => {
+    if (id && CONNECTION_CHANNEL_LABELS[id]) return CONNECTION_CHANNEL_LABELS[id]
     const platform = number.find((n) => n.id === id)
     return platform ? `${platform.platform} (${platform.phone_number})` : id || 'Not Set'
   }
@@ -148,8 +155,8 @@ export default function SingleClientPage() {
     let sudoName: string | null = null
     let leadAgentName: string | null = null
 
-    if (clientData.connecting_platform === 'email') {
-      platformName = 'Email'
+    if (clientData.connecting_platform && CONNECTION_CHANNEL_LABELS[clientData.connecting_platform]) {
+      platformName = CONNECTION_CHANNEL_LABELS[clientData.connecting_platform]
     } else if (isUuid(clientData.connecting_platform)) {
       const { data: platformData } = await supabase
         .from('client_contact_channels')
@@ -243,27 +250,11 @@ export default function SingleClientPage() {
 
   const fetchTransferLogs = async (id: string, limitOverride = historyLimit) => {
     const pageSize = limitOverride
-    const activityTypes = [
-      'client_created',
-      'client_info_updated',
-      'client_transferred',
-      'status_changed',
-      'service_assigned',
-      'connected_person_added',
-      'connected_person_updated',
-      'connected_person_removed',
-      'follow_up_created',
-      'follow_up_updated',
-      'follow_up_completed',
-      'follow_up_rescheduled',
-      'follow_up_deleted',
-    ]
 
     const { data: statusLogs, error: statusError } = await supabase
       .from('status_logs')
       .select('id, created_at, previous_status, new_status, changed_by, affected_user, action_type, note')
       .eq('client_id', id)
-      .in('action_type', activityTypes)
       .order('created_at', { ascending: false })
       .limit(pageSize + 1)
 
@@ -389,6 +380,14 @@ export default function SingleClientPage() {
       follow_up_completed: 'Follow-Up Completed',
       follow_up_rescheduled: 'Follow-Up Rescheduled',
       follow_up_deleted: 'Follow-Up Deleted',
+      client_note_added: 'Comment Added',
+      client_note_updated: 'Comment Updated',
+      client_note_deleted: 'Comment Deleted',
+      sale_added: 'Sale Added',
+      payment_added: 'Payment Added',
+      commission_split_added: 'Commission Split Added',
+      commission_split_updated: 'Commission Split Updated',
+      commission_locked: 'Commission Locked',
     }
 
     return labels[type] || type.replace(/_/g, ' ')
@@ -407,6 +406,14 @@ export default function SingleClientPage() {
 
     if (type.startsWith('follow_up')) {
       return `By ${log.changed_by_name || '-'}${log.affected_user_name && log.affected_user_name !== '-' ? ` | Assigned to ${log.affected_user_name}` : ''}`
+    }
+
+    if (type.startsWith('client_note')) {
+      return `Comment by ${log.changed_by_name || '-'}`
+    }
+
+    if (type.startsWith('sale') || type.startsWith('payment') || type.startsWith('commission')) {
+      return `By ${log.changed_by_name || '-'}${log.affected_user_name && log.affected_user_name !== '-' ? ` | Related to ${log.affected_user_name}` : ''}`
     }
 
     if (type === 'status_changed') {
@@ -1006,7 +1013,11 @@ export default function SingleClientPage() {
       <div className={`${activeClientPanel === 'notes' ? 'block' : 'hidden'} mt-6`}>
         {/* Notes / Assets Section */}
         <div className="bg-gray-800 p-4 rounded shadow">
-          <ClientNotes clientId={client.id} currentUser="system_admin" />
+          <ClientNotes
+            clientId={client.id}
+            currentUser="system_admin"
+            onActivitySaved={() => fetchTransferLogs(client.id)}
+          />
         </div>
       </div>
 

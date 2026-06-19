@@ -225,6 +225,15 @@ export default function SalePaymentPage() {
 
     const nextStatus = getSaleStatus(Number(sale.total_amount), paid + amount)
     await supabase.from('client_sales').update({ status: nextStatus }).eq('id', sale.id)
+    await supabase.from('status_logs').insert({
+      client_id: sale.client_id,
+      previous_status: sale.status || null,
+      new_status: nextStatus,
+      changed_by: user.id,
+      affected_user: sale.seller_user_id,
+      action_type: 'payment_added',
+      note: `Recorded ${paymentForm.stage} payment of ${formatMoney(amount, sale.currency)}${paymentForm.invoice.trim() ? ` | Invoice: ${paymentForm.invoice.trim()}` : ''}${paymentForm.transaction.trim() ? ` | Transaction: ${paymentForm.transaction.trim()}` : ''}${paymentForm.note.trim() ? `. Comment: ${paymentForm.note.trim()}` : ''}`,
+    })
 
     toast.success('Payment recorded.')
     setPaymentForm({ amount: '', date: today(), stage: 'upfront', invoice: '', transaction: '', note: '' })
@@ -232,7 +241,8 @@ export default function SalePaymentPage() {
   }
 
   const handleAddSplit = async (payment: SalePayment) => {
-    if (!user || !canAddPayment) return
+    if (!user || !sale || !canAddPayment) return
+    const currentSale = sale
     if (payment.commission_locked) {
       toast.error('Commission is locked. Edit existing splits only.')
       return
@@ -264,12 +274,22 @@ export default function SalePaymentPage() {
     }
 
     toast.success('Commission split added.')
+    await supabase.from('status_logs').insert({
+      client_id: currentSale.client_id,
+      previous_status: currentSale.status || null,
+      new_status: currentSale.status || null,
+      changed_by: user.id,
+      affected_user: isLeadGenSplit ? null : form.recipientUserId,
+      action_type: 'commission_split_added',
+      note: `Added commission split: ${percent}% (${formatMoney(amount, currentSale.currency)}) for payment ${formatMoney(payment.amount_paid, currentSale.currency)}${form.note.trim() ? `. Comment: ${form.note.trim()}` : ''}`,
+    })
     setSplitForms((prev) => ({ ...prev, [payment.id]: { recipientUserId: '', leadGenId: '', role: 'helper', percent: '', note: '' } }))
     if (typeof saleId === 'string') fetchSale(saleId)
   }
 
   const handleLockCommission = async (payment: SalePayment) => {
-    if (!user || !canAddPayment) return
+    if (!user || !sale || !canAddPayment) return
+    const currentSale = sale
     if ((payment.sale_commission_splits || []).length === 0) return toast.error('Add at least one split before locking commission.')
 
     const { error } = await supabase
@@ -284,11 +304,21 @@ export default function SalePaymentPage() {
     }
 
     toast.success('Commission locked. You can still edit existing splits.')
+    await supabase.from('status_logs').insert({
+      client_id: currentSale.client_id,
+      previous_status: currentSale.status || null,
+      new_status: currentSale.status || null,
+      changed_by: user.id,
+      affected_user: currentSale.seller_user_id,
+      action_type: 'commission_locked',
+      note: `Locked commission for payment ${formatMoney(payment.amount_paid, currentSale.currency)}`,
+    })
     if (typeof saleId === 'string') fetchSale(saleId)
   }
 
   const handleEditSplit = async (payment: SalePayment, split: CommissionSplit) => {
-    if (!user || !canAddPayment) return
+    if (!user || !sale || !canAddPayment) return
+    const currentSale = sale
 
     const nextPercentText = window.prompt('Update commission percent', String(split.commission_percent || 0))
     if (nextPercentText === null) return
@@ -315,6 +345,15 @@ export default function SalePaymentPage() {
     }
 
     toast.success('Commission updated.')
+    await supabase.from('status_logs').insert({
+      client_id: currentSale.client_id,
+      previous_status: currentSale.status || null,
+      new_status: currentSale.status || null,
+      changed_by: user.id,
+      affected_user: split.recipient_user_id || null,
+      action_type: 'commission_split_updated',
+      note: `Updated commission split from ${split.commission_percent}% to ${nextPercent}% (${formatMoney(nextAmount, currentSale.currency)})`,
+    })
     if (typeof saleId === 'string') fetchSale(saleId)
   }
 

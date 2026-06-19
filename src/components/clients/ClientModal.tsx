@@ -25,6 +25,11 @@ const getEmptyForm = () => ({
   business_name: '',
 })
 
+const ensureEditableList = (value?: string[] | null) => {
+  const items = Array.isArray(value) ? value : []
+  return items.length > 0 ? items : ['']
+}
+
 const normalizeText = (value: unknown) => String(value || '').trim().toLowerCase()
 const normalizeList = (value: unknown) =>
   (Array.isArray(value) ? value : [])
@@ -142,8 +147,8 @@ export default function ClientModal({
       if (clientData) {
       setForm({
         client_name: clientData.client_name || '',
-        phone_numbers: clientData.phone_numbers || [''],
-        email_addresses: clientData.email_addresses || [''],
+        phone_numbers: ensureEditableList(clientData.phone_numbers),
+        email_addresses: ensureEditableList(clientData.email_addresses),
         work_email: clientData.work_email || '',
         website_url: clientData.website_url || '',
         status: clientData.status || 'new',
@@ -154,7 +159,7 @@ export default function ClientModal({
         platform: clientData.platform || '',
         lead_gen_id: clientData?.lead_gen_id || '',
         lead_nature: parseLeadNatureValues(clientData?.lead_nature),
-        secondary_phones: clientData.secondary_phones || [''],
+        secondary_phones: ensureEditableList(clientData.secondary_phones),
         business_name: clientData.business_name || '',
         
         
@@ -554,6 +559,7 @@ export default function ClientModal({
               <option value="">Select Connection</option>
               <option value="email">On Email</option>
               <option value="facebook">On Facebook</option>
+              <option value="thread">On Thread</option>
               {number.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.platform} - {item.phone_number}

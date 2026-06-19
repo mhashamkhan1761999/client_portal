@@ -9,6 +9,7 @@ import { Dialog } from '@headlessui/react'
 type ClientNotesProps = {
   clientId: string
   currentUser: string
+  onActivitySaved?: () => void
 }
 
 type Note = {
@@ -24,7 +25,7 @@ type Note = {
   signed_asset_url?: string | null
 }
 
-export default function ClientNotes({ clientId, currentUser }: ClientNotesProps) {
+export default function ClientNotes({ clientId, currentUser, onActivitySaved }: ClientNotesProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [noteInput, setNoteInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -107,6 +108,20 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
     setSelectedNote(null)
   }
 
+  const logNoteActivity = async (actionType: string, note: string, userId?: string) => {
+    const { error } = await supabase.from('status_logs').insert({
+      client_id: clientId,
+      previous_status: null,
+      new_status: null,
+      changed_by: userId || null,
+      affected_user: userId || null,
+      action_type: actionType,
+      note,
+    })
+
+    if (error) console.error('Failed to write note activity:', error.message)
+  }
+
   const handleAddOrEditNote = async () => {
     if (!noteInput.trim()) return
     setLoading(true)
@@ -134,6 +149,8 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
       }
     }
 
+    const noteText = noteInput.trim()
+
     if (editingNoteId) {
       if (!file) {
         const { data: existingNote } = await supabase
@@ -149,19 +166,31 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
       await supabase
         .from('client_notes')
         .update({
-          note_text: noteInput.trim(),
+          note_text: noteText,
           asset_url,
           asset_type,
         })
         .eq('id', editingNoteId)
+
+      await logNoteActivity(
+        'client_note_updated',
+        `Updated client comment${noteText ? `: ${noteText}` : ''}${asset_url ? ' | Asset attached' : ''}`,
+        userId
+      )
     } else {
       await supabase.from('client_notes').insert({
         client_id: clientId,
         created_by: userId,
-        note_text: noteInput.trim(),
+        note_text: noteText,
         asset_url,
         asset_type,
       })
+
+      await logNoteActivity(
+        'client_note_added',
+        `Added client comment${noteText ? `: ${noteText}` : ''}${asset_url ? ' | Asset attached' : ''}`,
+        userId
+      )
     }
 
     setNoteInput('')
@@ -169,6 +198,7 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
     setEditingNoteId(null)
     setLoading(false)
     fetchNotes()
+    onActivitySaved?.()
   }
 
   const handleDeleteNote = async (id: string) => {
@@ -178,7 +208,7 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
     try {
       const { data: noteData, error: fetchError } = await supabase
         .from('client_notes')
-        .select('asset_url')
+        .select('asset_url, note_text, created_by')
         .eq('id', id)
         .single()
 
@@ -203,7 +233,15 @@ export default function ClientNotes({ clientId, currentUser }: ClientNotesProps)
 
       if (deleteError) throw new Error(`Delete error: ${deleteError.message}`)
 
+      const { data: userData } = await supabase.auth.getUser()
+      await logNoteActivity(
+        'client_note_deleted',
+        `Deleted client comment${noteData?.note_text ? `: ${noteData.note_text}` : ''}`,
+        userData?.user?.id || noteData?.created_by
+      )
+
       fetchNotes()
+      onActivitySaved?.()
     } catch (err: any) {
       console.error('Failed to delete note and/or image:', err.message)
     }

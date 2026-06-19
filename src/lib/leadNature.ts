@@ -7,6 +7,7 @@ export const LEAD_NATURE_OPTIONS = [
   { value: 'social_media_management', label: 'Social Media Management' },
   { value: 'video_editing', label: 'Video Editing' },
   { value: 'graphic_design', label: 'Graphic Design' },
+  { value: 'e_books', label: 'E-Books' },
   { value: 'other', label: 'Other' },
 ] as const
 
