@@ -34,15 +34,16 @@ export const useAnalytics = (userId: string, role: string, filter: FilterType = 
         }
 
         // --- Total Sales ---
-        const { data: salesData } = await supabase.from("client_service_sales").select("price, created_by");
+        const { data: salesData } = await supabase.from("client_sales").select("total_amount, seller_user_id");
         let totalSales = 0;
         const totalSalesByUser: Record<string, number> = {};
 
         if (salesData) {
           salesData.forEach((sale: any) => {
-            totalSales += parseFloat(sale.price);
-            if (sale.created_by) {
-              totalSalesByUser[sale.created_by] = (totalSalesByUser[sale.created_by] || 0) + parseFloat(sale.price);
+            const saleTotal = Number(sale.total_amount || 0);
+            totalSales += saleTotal;
+            if (sale.seller_user_id) {
+              totalSalesByUser[sale.seller_user_id] = (totalSalesByUser[sale.seller_user_id] || 0) + saleTotal;
             }
           });
         }

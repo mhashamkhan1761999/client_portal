@@ -166,14 +166,14 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
       // Sales
       const { data: salesData } = await applyRange(
         supabase
-        .from("client_service_sales")
-          .select("sold_price, created_at")
-          .eq("created_by", user.id),
-        "created_at",
+        .from("client_sales")
+          .select("total_amount, sale_date")
+          .eq("seller_user_id", user.id),
+        "sale_date",
         filter
       );
 
-      const totalSales = ((salesData || []) as any[]).reduce((acc: number, s: any) => acc + Number(s.sold_price || 0), 0);
+      const totalSales = ((salesData || []) as any[]).reduce((acc: number, s: any) => acc + Number(s.total_amount || 0), 0);
       totalSalesCount += totalSales;
 
       // Lead Gen Clients
@@ -277,7 +277,7 @@ export default function AnalyticsDashboard({ currentUser }: { currentUser: any }
     const channel = supabase.channel('analytics-live')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchAnalytics())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_transfers' }, () => fetchAnalytics())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'client_service_sales' }, () => fetchAnalytics())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'client_sales' }, () => fetchAnalytics())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'follow_ups' }, () => fetchAnalytics())
         .subscribe();
 
