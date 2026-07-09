@@ -380,9 +380,9 @@ export default function SingleClientPage() {
       follow_up_completed: 'Follow-Up Completed',
       follow_up_rescheduled: 'Follow-Up Rescheduled',
       follow_up_deleted: 'Follow-Up Deleted',
-      client_note_added: 'Comment Added',
-      client_note_updated: 'Comment Updated',
-      client_note_deleted: 'Comment Deleted',
+      client_note_added: 'Note / Asset Added',
+      client_note_updated: 'Note / Asset Updated',
+      client_note_deleted: 'Note / Asset Deleted',
       sale_added: 'Sale Added',
       payment_added: 'Payment Added',
       commission_split_added: 'Commission Split Added',
@@ -401,7 +401,14 @@ export default function SingleClientPage() {
     }
 
     if (type.startsWith('connected_person')) {
-      return `Person: ${log.affected_user_name || '-'} | By ${log.changed_by_name || '-'}`
+      const actorName = log.changed_by_name || '-'
+      const personName = log.affected_user_name || '-'
+
+      if (type === 'connected_person_added') return `${actorName} connected this client with ${personName}`
+      if (type === 'connected_person_updated') return `${actorName} updated this client's connection with ${personName}`
+      if (type === 'connected_person_removed') return `${actorName} removed ${personName} from this client`
+
+      return `${actorName} changed this client's connection with ${personName}`
     }
 
     if (type.startsWith('follow_up')) {
@@ -409,7 +416,13 @@ export default function SingleClientPage() {
     }
 
     if (type.startsWith('client_note')) {
-      return `Comment by ${log.changed_by_name || '-'}`
+      const actorName = log.changed_by_name || '-'
+
+      if (type === 'client_note_added') return `${actorName} added a note or asset`
+      if (type === 'client_note_updated') return `${actorName} updated a note or asset`
+      if (type === 'client_note_deleted') return `${actorName} deleted a note or asset`
+
+      return `By ${actorName}`
     }
 
     if (type.startsWith('sale') || type.startsWith('payment') || type.startsWith('commission')) {
@@ -975,7 +988,7 @@ export default function SingleClientPage() {
                     {getTimelineMeta(log)}
                   </div>
                   {log.reason && <div className="mt-1 text-gray-400">Reason: {getTransferReasonLabel(log.reason)}</div>}
-                  {log.note && <div className="mt-1 text-gray-300">{log.note}</div>}
+                  {log.note && <div className="mt-1 whitespace-pre-line break-words text-gray-300">{log.note}</div>}
                 </div>
               ))}
               {hasMoreHistory && (

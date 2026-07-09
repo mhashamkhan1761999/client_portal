@@ -25,7 +25,29 @@ type Note = {
   signed_asset_url?: string | null
 }
 
-export default function ClientNotes({ clientId, currentUser, onActivitySaved }: ClientNotesProps) {
+const getStoredNoteText = (noteText: string, selectedFile: File | null) => {
+  if (noteText) return noteText
+  return selectedFile ? `Asset uploaded: ${selectedFile.name}` : ''
+}
+
+const getNoteActivityLabel = (action: 'added' | 'updated', noteText: string, assetUrl?: string | null) => {
+  if (noteText && assetUrl) return `${action === 'added' ? 'Added' : 'Updated'} client note and asset`
+  if (assetUrl) return `${action === 'added' ? 'Added' : 'Updated'} client asset`
+  return `${action === 'added' ? 'Added' : 'Updated'} client note`
+}
+
+const formatNoteActivity = (label: string, noteText?: string, assetUrl?: string | null) =>
+  `${label}${noteText ? `: ${noteText}` : ''}${assetUrl ? ' | Asset attached' : ''}`
+
+function FormattedNoteText({ text, className = '' }: { text: string; className?: string }) {
+  return (
+    <div className={`whitespace-pre-line break-words ${className}`}>
+      {text}
+    </div>
+  )
+}
+
+export default function ClientNotes({ clientId, onActivitySaved }: ClientNotesProps) {
   const [notes, setNotes] = useState<Note[]>([])
   const [noteInput, setNoteInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -119,11 +141,23 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
       note,
     })
 
-    if (error) console.error('Failed to write note activity:', error.message)
+    if (!error) return
+
+    const { error: fallbackError } = await supabase.from('status_logs').insert({
+      client_id: clientId,
+      previous_status: null,
+      new_status: null,
+      changed_by: null,
+      affected_user: null,
+      action_type: actionType,
+      note,
+    })
+
+    if (fallbackError) console.error('Failed to write note activity:', fallbackError.message || error.message)
   }
 
   const handleAddOrEditNote = async () => {
-    if (!noteInput.trim()) return
+    if (!noteInput.trim() && !file) return
     setLoading(true)
 
     const { data: userData } = await supabase.auth.getUser()
@@ -149,7 +183,8 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
       }
     }
 
-    const noteText = noteInput.trim()
+    const rawNoteText = noteInput.trim()
+    const noteText = getStoredNoteText(rawNoteText, file)
 
     if (editingNoteId) {
       if (!file) {
@@ -174,7 +209,7 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
 
       await logNoteActivity(
         'client_note_updated',
-        `Updated client comment${noteText ? `: ${noteText}` : ''}${asset_url ? ' | Asset attached' : ''}`,
+        formatNoteActivity(getNoteActivityLabel('updated', rawNoteText, asset_url), rawNoteText, asset_url),
         userId
       )
     } else {
@@ -188,7 +223,7 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
 
       await logNoteActivity(
         'client_note_added',
-        `Added client comment${noteText ? `: ${noteText}` : ''}${asset_url ? ' | Asset attached' : ''}`,
+        formatNoteActivity(getNoteActivityLabel('added', rawNoteText, asset_url), rawNoteText, asset_url),
         userId
       )
     }
@@ -296,7 +331,7 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
       <div className="space-y-4">
         {notes.map((note) => (
           <div key={note.id} className="bg-[#1c1c1e] p-3 rounded shadow border border-gray-700">
-            <p className="text-white text-sm">{note.note_text}</p>
+            <FormattedNoteText text={note.note_text} className="text-white text-sm" />
             {note.asset_url && note.asset_type?.startsWith('image/') && note.signed_asset_url && (
               <div className="mt-2">
                 <Image
@@ -336,7 +371,7 @@ export default function ClientNotes({ clientId, currentUser, onActivitySaved }: 
             </Dialog.Title>
             {selectedNote && (
               <>
-                <p className="text-white mb-2">{selectedNote.note_text}</p>
+                <FormattedNoteText text={selectedNote.note_text} className="text-white mb-2" />
                 {selectedNote.asset_type?.startsWith('image/') && selectedNote.signed_asset_url && (
                   <Image
                     src={selectedNote.signed_asset_url}
