@@ -28,6 +28,8 @@ export default function AdminUserManagement() {
     phone_number: "",
     assigned_to: "",
   });
+  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
+  const [editingChannelOriginal, setEditingChannelOriginal] = useState<any | null>(null);
 
   // --- Lead Gens State ---
   const [leadGens, setLeadGens] = useState<LeadGen[]>([]);
@@ -143,11 +145,88 @@ export default function AdminUserManagement() {
     setNewChannel({ ...newChannel, [e.target.name]: e.target.value });
   };
 
+  const resetChannelForm = () => {
+    setNewChannel({ platform: "", phone_number: "", assigned_to: "" });
+    setEditingChannelId(null);
+    setEditingChannelOriginal(null);
+  };
+
+  const syncAssignedPhones = async (
+    previousAssignedTo: string,
+    nextAssignedTo: string,
+    previousPhone: string,
+    nextPhone: string
+  ) => {
+    const userIds = Array.from(new Set([previousAssignedTo, nextAssignedTo].filter(Boolean)));
+    if (userIds.length === 0) return;
+
+    const { data: affectedUsers, error } = await supabase
+      .from("users")
+      .select("id, assigned_phones")
+      .in("id", userIds);
+
+    if (error) {
+      console.error("Failed to fetch users for assigned phone sync:", error);
+      return;
+    }
+
+    await Promise.all((affectedUsers || []).map(async (user: any) => {
+      let assignedPhones = Array.isArray(user.assigned_phones) ? [...user.assigned_phones] : [];
+
+      if (user.id === previousAssignedTo) {
+        assignedPhones = assignedPhones.filter((phone: string) => phone !== previousPhone);
+      }
+
+      if (user.id === nextAssignedTo && nextPhone && !assignedPhones.includes(nextPhone)) {
+        assignedPhones.push(nextPhone);
+      }
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update({ assigned_phones: assignedPhones })
+        .eq("id", user.id);
+
+      if (updateError) {
+        console.error("Failed to sync assigned phones:", updateError);
+      }
+    }));
+  };
+
+  const syncClientChannelReferences = async (channel: any, previousPhone: string) => {
+    if (!channel?.id || !previousPhone) return;
+
+    const legacyValues = [
+      previousPhone,
+      `${channel.platform} - ${previousPhone}`,
+      `${editingChannelOriginal?.platform || channel.platform} - ${previousPhone}`,
+    ];
+
+    await Promise.all(Array.from(new Set(legacyValues)).map(async (value) => {
+      const { error } = await supabase
+        .from("clients")
+        .update({ connecting_platform: channel.id })
+        .eq("connecting_platform", value);
+
+      if (error) {
+        console.error("Failed to sync client channel references:", error);
+      }
+    }));
+  };
+
   // Delete channel
   const handleDeleteChannel = async (id: string) => {
+    const channel = channels.find((ch) => ch.id === id);
     const { error } = await supabase.from("client_contact_channels").delete().eq("id", id);
     if (!error) {
+      if (channel) {
+        await syncAssignedPhones(channel.assigned_to, "", channel.phone_number, "");
+      }
       setChannels(channels.filter((ch) => ch.id !== id));
+      fetchUsers();
+      if (editingChannelId === id) resetChannelForm();
+      toast.success("Assigned number removed");
+    } else {
+      toast.error(error.message || "Failed to remove assigned number");
     }
   };
 
@@ -167,19 +246,67 @@ export default function AdminUserManagement() {
     }
   };
 
-  // Add channel
+  const handleEditChannel = (channel: any) => {
+    setEditingChannelId(channel.id);
+    setEditingChannelOriginal(channel);
+    setNewChannel({
+      platform: channel.platform || "",
+      phone_number: channel.phone_number || "",
+      assigned_to: channel.assigned_to || "",
+    });
+  };
+
+  // Add or update channel
   const handleAddChannel = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (editingChannelId && editingChannelOriginal) {
+      const { data, error } = await supabase
+        .from("client_contact_channels")
+        .update(newChannel)
+        .eq("id", editingChannelId)
+        .select()
+        .single();
+
+      if (!error && data) {
+        await Promise.all([
+          syncClientChannelReferences(data, editingChannelOriginal.phone_number),
+          syncAssignedPhones(
+            editingChannelOriginal.assigned_to,
+            data.assigned_to,
+            editingChannelOriginal.phone_number,
+            data.phone_number
+          ),
+        ]);
+        setChannels(channels.map((channel) => (channel.id === data.id ? data : channel)));
+        resetChannelForm();
+        fetchUsers();
+        toast.success("Assigned number updated");
+      } else {
+        console.error("Error updating channel:", error);
+        toast.error(error?.message || "Failed to update assigned number");
+      }
+
+      return;
+    }
+
     const { data, error } = await supabase
       .from("client_contact_channels")
       .insert([newChannel])
       .select();
 
     if (!error && data) {
+      const createdChannel = data[0];
+      if (createdChannel) {
+        await syncAssignedPhones("", createdChannel.assigned_to, "", createdChannel.phone_number);
+      }
       setChannels([...channels, ...data]);
-      setNewChannel({ platform: "", phone_number: "", assigned_to: "" });
+      resetChannelForm();
+      fetchUsers();
+      toast.success("Assigned number added");
     } else {
       console.error("Error adding channel:", error);
+      toast.error(error?.message || "Failed to add assigned number");
     }
   };
 
@@ -471,13 +598,26 @@ export default function AdminUserManagement() {
                   </select>
                 </div>
 
+                {editingChannelId && (
+                  <p className="text-sm text-yellow-300">Editing assigned number. Submit to update all linked clients.</p>
+                )}
+
                 {/* Submit Button */}
                 <button
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
                 >
-                  ➕ Add Channel
+                  {editingChannelId ? 'Update Channel' : 'Add Channel'}
                 </button>
+                {editingChannelId && (
+                  <button
+                    type="button"
+                    onClick={resetChannelForm}
+                    className="ml-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                )}
               </form>
 
               {/* Channel List */}
@@ -513,11 +653,17 @@ export default function AdminUserManagement() {
                               </span>
                             </div>
 
+                            <button
+                              onClick={() => handleEditChannel(ch)}
+                              className="mr-2 px-3 py-1 text-sm font-medium text-sky-300 hover:text-sky-100 hover:bg-sky-500/10 rounded-lg transition-colors"
+                            >
+                              Edit
+                            </button>
                             {/* Delete Button */}
                             <button
                               onClick={() => {
                                 if (window.confirm("Are you sure you want to delete this Assigned Number?")) {
-                                  handleDeleteLeadGen(ch.id);
+                                  handleDeleteChannel(ch.id);
                                 }
                               }}
                               className="px-3 py-1 text-sm font-medium text-red-400 hover:text-red-200 hover:bg-red-500/10 rounded-lg transition-colors"
